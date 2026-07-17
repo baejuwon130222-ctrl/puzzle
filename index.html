@@ -1361,7 +1361,7 @@
      https://aistudio.google.com/apikey 에서 무료로 발급받아
      아래 큰따옴표 안에 붙여넣으세요.
      ══════════════════════════════════════════════════════════ */
-  const GEMINI_API_KEY = "여기에_API_키_붙여넣기";
+  const GEMINI_API_KEY = "AQ.Ab8RN6IMHsldOrRKfVGTUBycicIjF-ZklZQY3CY8ApFNZhtsNw";
   const GEMINI_TEXT_MODEL  = "gemini-flash-latest";     // 대화용(항상 최신 Flash)
   const GEMINI_IMAGE_MODEL = "gemini-2.5-flash-image";  // 이미지 생성용(무료 Nano Banana)
   /* ▲▲▲ Gemini 키 끝 ▲▲▲ */
@@ -1469,7 +1469,7 @@
     const text = gemInput.value.trim();
     if((!text && !attached) || gemBusy) return;
 
-    if(GEMINI_API_KEY === "여기에_API_키_붙여넣기" || !GEMINI_API_KEY){
+    if(GEMINI_API_KEY === "AQ.Ab8RN6IMHsldOrRKfVGTUBycicIjF-ZklZQY3CY8ApFNZhtsNw" || !GEMINI_API_KEY){
       gemEmpty.style.display = 'none';
       gemAddBubble('user', text || '(파일)');
       gemAddBubble('ai', 'API 키가 아직 설정되지 않았어요.\n코드의 GEMINI_API_KEY 자리에 키를 넣어주세요.', 'error');
