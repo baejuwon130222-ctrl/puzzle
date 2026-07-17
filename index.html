@@ -204,6 +204,42 @@
   #gemini-send:hover{ background:#1d4fd8; }
   #gemini-send:disabled{ opacity:.4; cursor:default; }
 
+  #gemini-attach{
+    flex:0 0 auto;
+    width:42px; height:42px; border-radius:10px;
+    border:1px solid rgba(255,255,255,.14); background:#1a1a1f; color:#fff;
+    font-size:22px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+  }
+  #gemini-attach:hover{ background:#26262d; }
+  #gemini-attach-preview{
+    flex:0 0 auto;
+    padding:0 var(--pad);
+    display:flex; gap:8px; flex-wrap:wrap;
+  }
+  #gemini-attach-preview:not(:empty){ padding:8px var(--pad); }
+  #gemini-attach-preview .thumb{
+    position:relative; width:56px; height:56px; border-radius:8px; overflow:hidden;
+    border:1px solid rgba(255,255,255,.15);
+  }
+  #gemini-attach-preview .thumb img{ width:100%; height:100%; object-fit:cover; }
+  #gemini-attach-preview .thumb .x{
+    position:absolute; top:1px; right:1px; width:16px; height:16px;
+    background:rgba(0,0,0,.7); color:#fff; border-radius:50%;
+    font-size:11px; display:flex; align-items:center; justify-content:center; cursor:pointer;
+  }
+  /* 채팅 속 이미지(업로드/생성) */
+  .msg img.chat-img{
+    display:block; max-width:100%; border-radius:10px; margin-top:6px;
+  }
+  .msg .gen-actions{ margin-top:8px; display:flex; gap:8px; }
+  .msg .save-custom{
+    background:#2563eb; color:#fff; border:none; border-radius:8px;
+    padding:6px 12px; font:inherit; font-size:12px; cursor:pointer;
+  }
+  .msg .save-custom:hover{ background:#1d4fd8; }
+  .msg .save-custom:disabled{ opacity:.5; cursor:default; }
+
   /* ══════════ 모달 ══════════ */
   #code-modal{
     position:absolute; inset:0; z-index:20;
@@ -458,11 +494,13 @@
     <div id="main-nav-left">
       <button class="btn-text" id="home-btn">메인화면</button>
       <button class="btn-text" id="gemini-btn">Gemini</button>
+      <button class="btn-text" id="gemini-custom-btn">Gemini 커스텀</button>
     </div>
 
     <div id="main-nav">
       <button class="btn-text" id="collection-btn">사진</button>
       <button class="btn-text" id="video-collection-btn">영상</button>
+      <button class="btn-text" id="custom-collection-btn">커스텀</button>
     </div>
 
     <div id="hint-line" class="label">방향키를 눌러보세요</div>
@@ -555,11 +593,11 @@
     </div>
   </div>
 
-  <!-- ── Gemini 채팅 화면 ── -->
+  <!-- ── Gemini 채팅 화면 (일반/커스텀 공용) ── -->
   <div id="gemini-screen">
     <div id="gemini-head">
       <div class="dot"></div>
-      <div class="title">Gemini</div>
+      <div class="title" id="gemini-title">Gemini</div>
       <div class="spacer"></div>
       <button id="gemini-clear">기록 삭제</button>
       <button id="gemini-close">✕</button>
@@ -567,10 +605,24 @@
     <div id="gemini-log">
       <div id="gemini-empty">무엇이든 물어보세요.<br>대화는 이 브라우저에 저장됩니다.</div>
     </div>
+    <div id="gemini-attach-preview"></div>
     <div id="gemini-input-row">
+      <button id="gemini-attach" title="파일 첨부">＋</button>
+      <input type="file" id="gemini-file" accept="image/*" style="display:none">
       <textarea id="gemini-input" rows="1" placeholder="메시지를 입력하세요…"></textarea>
       <button id="gemini-send" title="보내기">➤</button>
     </div>
+  </div>
+
+  <!-- ── 커스텀 컬렉션 (생성물 저장) ── -->
+  <div id="custom-collection-screen" class="sheet">
+    <div class="sheet-head">
+      <span class="label">커스텀 컬렉션</span>
+      <button class="btn" id="custom-collection-back" title="닫기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="grid" id="custom-grid"></div>
   </div>
 
 </div>
@@ -629,7 +681,7 @@
   const seek = $('seek'), seekFill = $('seek-fill');
 
   let N = 3;   // 한 변의 조각 수 (3→9피스, 4→16피스, 5→25피스, 6→36피스)
-  const SCREENS = [puzzleScreen, solvedScreen, collectionScreen, videoCollectionScreen, videoScreen];
+  const SCREENS = [puzzleScreen, solvedScreen, collectionScreen, videoCollectionScreen, videoScreen, document.getElementById('custom-collection-screen')];
 
   /* ---------- 공용 선택 모달 ----------
      openModal({ title, options:[{label, onClick}], onCancel }) */
@@ -701,6 +753,7 @@
       // 사진을 보다가 ESC/F11로 전체화면을 나가면 → 이전 화면으로 복귀
       if(solvedScreen.classList.contains('show') && photoFullReturn){
         photoFullReturn = false;
+        if(solvedReturn){ const fn = solvedReturn; solvedReturn = null; fn(); return; }
         if(fromCollection){ fromCollection = false; openCollection(); }
         else goMain();
         return;
@@ -901,8 +954,10 @@
   let panning=false, sx=0, sy=0, stx=0, sty=0;
   let fromCollection = false;
   let photoFullReturn = false;
+  let solvedReturn = null;   // 자세히보기 닫을 때 돌아갈 함수(커스텀 등)
 
   function showSolved(url, imgIndex){
+    solvedReturn = null;
     if(imgIndex >= 0 && !fromCollection) saveToCollection(imgIndex);
     const tmp = new Image();
     tmp.onload = ()=>{
@@ -961,6 +1016,7 @@
   closeCorner.addEventListener('click', ()=>{
     photoFullReturn = false;
     exitFullscreen();
+    if(solvedReturn){ const fn = solvedReturn; solvedReturn = null; fn(); return; }
     if(fromCollection){ fromCollection = false; openCollection(); }
     else goMain();
   });
@@ -1300,132 +1356,274 @@
       }
     }catch(e){}
   }
-  // wipeCollection();
-
   /* ══════════════════════════════════════════════════════════
      ▼▼▼ Gemini API 키 ▼▼▼
      https://aistudio.google.com/apikey 에서 무료로 발급받아
      아래 큰따옴표 안에 붙여넣으세요.
      ══════════════════════════════════════════════════════════ */
-  const GEMINI_API_KEY = "AQ.Ab8RN6IMHsldOrRKfVGTUBycicIjF-ZklZQY3CY8ApFNZhtsNw";
-  const GEMINI_MODEL = "gemini-2.5-flash";
+  const GEMINI_API_KEY = "여기에_API_키_붙여넣기";
+  const GEMINI_TEXT_MODEL  = "gemini-2.5-flash";        // 대화용
+  const GEMINI_IMAGE_MODEL = "gemini-2.5-flash-image";  // 이미지 생성용(무료)
   /* ▲▲▲ Gemini 키 끝 ▲▲▲ */
+
+  // 안전필터 최대한 낮추기 (핵심 제한은 구글 서버가 막아 완전 해제는 불가)
+  const SAFETY_OFF = [
+    { category:'HARM_CATEGORY_HARASSMENT',        threshold:'BLOCK_NONE' },
+    { category:'HARM_CATEGORY_HATE_SPEECH',       threshold:'BLOCK_NONE' },
+    { category:'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold:'BLOCK_NONE' },
+    { category:'HARM_CATEGORY_DANGEROUS_CONTENT', threshold:'BLOCK_NONE' }
+  ];
 
   const geminiScreen = $('gemini-screen');
   const gemLog = $('gemini-log'), gemInput = $('gemini-input'), gemSend = $('gemini-send');
-  const gemEmpty = $('gemini-empty');
-  const GEM_KEY = 'secret_puzzle_gemini_chat';
-  let gemHistory = [];   // [{role:'user'|'model', text:''}]
-  let gemBusy = false;
+  const gemEmpty = $('gemini-empty'), gemTitle = $('gemini-title');
+  const gemAttachBtn = $('gemini-attach'), gemFile = $('gemini-file'), gemAttachPrev = $('gemini-attach-preview');
 
-  function gemLoad(){
-    try{ const r = localStorage.getItem(GEM_KEY); gemHistory = r ? JSON.parse(r) : []; }
-    catch(e){ gemHistory = []; }
-    if(!Array.isArray(gemHistory)) gemHistory = [];
+  let gemMode = 'chat';   // 'chat' = 일반, 'custom' = 이미지 생성
+  let gemBusy = false;
+  let attached = null;    // { dataUrl, mime, base64 }
+
+  const KEYS = { chat:'secret_puzzle_gemini_chat', custom:'secret_puzzle_gemini_custom' };
+  let histories = { chat:[], custom:[] };   // 각 모드별 [{role, text, img?}]
+
+  function curHist(){ return histories[gemMode]; }
+  function gemLoad(mode){
+    try{ const r = localStorage.getItem(KEYS[mode]); histories[mode] = r ? JSON.parse(r) : []; }
+    catch(e){ histories[mode] = []; }
+    if(!Array.isArray(histories[mode])) histories[mode] = [];
   }
   function gemSave(){
-    try{ localStorage.setItem(GEM_KEY, JSON.stringify(gemHistory)); }catch(e){}
+    try{ localStorage.setItem(KEYS[gemMode], JSON.stringify(curHist())); }catch(e){}
   }
+
   function gemRender(){
     gemLog.querySelectorAll('.msg').forEach(n => n.remove());
-    if(gemHistory.length === 0){ gemEmpty.style.display = 'block'; return; }
+    const h = curHist();
+    if(h.length === 0){ gemEmpty.style.display = 'block'; return; }
     gemEmpty.style.display = 'none';
-    gemHistory.forEach(m => gemAddBubble(m.role === 'user' ? 'user' : 'ai', m.text));
+    h.forEach(m => gemAddBubble(m.role === 'user' ? 'user' : 'ai', m.text, null, m.img, m.saveable));
     gemLog.scrollTop = gemLog.scrollHeight;
   }
-  function gemAddBubble(kind, text, extra){
+
+  // kind: 'user'|'ai', imgUrl: 이미지 dataURL, saveable: 생성이미지면 저장버튼 표시
+  function gemAddBubble(kind, text, extra, imgUrl, saveable){
     const d = document.createElement('div');
     d.className = 'msg ' + (kind === 'user' ? 'user' : 'ai') + (extra ? ' ' + extra : '');
-    d.textContent = text;
+    if(text){ const span = document.createElement('span'); span.textContent = text; d.appendChild(span); }
+    if(imgUrl){
+      const img = document.createElement('img');
+      img.className = 'chat-img'; img.src = imgUrl;
+      d.appendChild(img);
+      if(saveable){
+        const wrap = document.createElement('div'); wrap.className = 'gen-actions';
+        const btn = document.createElement('button'); btn.className = 'save-custom'; btn.textContent = '커스텀 업로드';
+        btn.addEventListener('click', ()=>{
+          saveCustom({ type:'image', url:imgUrl });
+          btn.textContent = '저장됨 ✓'; btn.disabled = true;
+        });
+        wrap.appendChild(btn); d.appendChild(wrap);
+      }
+    }
     gemLog.appendChild(d);
     gemLog.scrollTop = gemLog.scrollHeight;
     return d;
   }
-  function openGemini(){
-    showOnly(geminiScreen);   // 다른 화면 다 숨김
-    geminiScreen.classList.add('show');
+
+  function openGeminiMode(mode){
+    gemMode = mode;
+    gemTitle.textContent = mode === 'custom' ? 'Gemini 커스텀 (이미지 생성)' : 'Gemini';
+    gemInput.placeholder = mode === 'custom'
+      ? '만들고 싶은 이미지를 설명하세요… (파일 첨부 가능)'
+      : '메시지를 입력하세요…';
+    gemEmpty.innerHTML = mode === 'custom'
+      ? '설명을 입력하면 이미지를 만들어드려요.<br>파일을 첨부해 참고하게 할 수도 있어요.'
+      : '무엇이든 물어보세요.<br>대화는 이 브라우저에 저장됩니다.';
+    clearAttach();
+    showOnly(geminiScreen); geminiScreen.classList.add('show');
     setAppRatio(1);
-    gemLoad(); gemRender();
+    gemLoad(mode); gemRender();
     setTimeout(()=> gemInput.focus(), 50);
   }
-  function closeGemini(){
-    geminiScreen.classList.remove('show');
-    goMain();
-  }
+  function closeGemini(){ geminiScreen.classList.remove('show'); goMain(); }
+
+  // ── 파일 첨부 ──
+  function clearAttach(){ attached = null; gemAttachPrev.innerHTML = ''; }
+  gemAttachBtn.addEventListener('click', ()=> gemFile.click());
+  gemFile.addEventListener('change', ()=>{
+    const f = gemFile.files[0]; gemFile.value = '';
+    if(!f) return;
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      const dataUrl = reader.result;
+      attached = { dataUrl, mime: f.type, base64: dataUrl.split(',')[1] };
+      gemAttachPrev.innerHTML = '';
+      const t = document.createElement('div'); t.className = 'thumb';
+      t.innerHTML = '<img src="'+dataUrl+'"><div class="x">✕</div>';
+      t.querySelector('.x').addEventListener('click', clearAttach);
+      gemAttachPrev.appendChild(t);
+    };
+    reader.readAsDataURL(f);
+  });
 
   async function gemSendMessage(){
     const text = gemInput.value.trim();
-    if(!text || gemBusy) return;
+    if((!text && !attached) || gemBusy) return;
 
     if(GEMINI_API_KEY === "여기에_API_키_붙여넣기" || !GEMINI_API_KEY){
       gemEmpty.style.display = 'none';
-      gemAddBubble('user', text);
+      gemAddBubble('user', text || '(파일)');
       gemAddBubble('ai', 'API 키가 아직 설정되지 않았어요.\n코드의 GEMINI_API_KEY 자리에 키를 넣어주세요.', 'error');
-      gemInput.value = ''; gemInput.style.height = 'auto';
+      gemInput.value = ''; gemInput.style.height = 'auto'; clearAttach();
       return;
     }
 
     gemEmpty.style.display = 'none';
-    gemInput.value = ''; gemInput.style.height = 'auto';
+    const userImg = attached ? attached.dataUrl : null;
+    const sendAttach = attached;
+    gemInput.value = ''; gemInput.style.height = 'auto'; clearAttach();
     gemBusy = true; gemSend.disabled = true;
 
-    gemAddBubble('user', text);
-    gemHistory.push({ role:'user', text }); gemSave();
+    // 사용자 말풍선
+    gemAddBubble('user', text, null, userImg);
+    const h = curHist();
+    h.push({ role:'user', text, img:userImg }); gemSave();
 
-    const thinking = gemAddBubble('ai', '생각 중…', 'thinking');
+    const thinking = gemAddBubble('ai', gemMode === 'custom' ? '이미지 만드는 중…' : '생각 중…', 'thinking');
 
-    // 대화 맥락 전체를 Gemini 형식으로 변환
-    const contents = gemHistory.map(m => ({
-      role: m.role === 'user' ? 'user' : 'model',
-      parts: [{ text: m.text }]
-    }));
+    // 요청 parts 구성 (텍스트 + 첨부 이미지)
+    const parts = [];
+    if(text) parts.push({ text });
+    if(sendAttach) parts.push({ inline_data: { mime_type: sendAttach.mime, data: sendAttach.base64 } });
+
+    const model = gemMode === 'custom' ? GEMINI_IMAGE_MODEL : GEMINI_TEXT_MODEL;
+
+    // 일반 모드는 대화 맥락 포함, 커스텀(이미지)은 이번 요청만
+    let contents;
+    if(gemMode === 'custom'){
+      contents = [{ role:'user', parts }];
+    } else {
+      contents = h.filter(m => m.text || m.img).map(m => {
+        const p = [];
+        if(m.text) p.push({ text:m.text });
+        return { role: m.role === 'user' ? 'user' : 'model', parts: p.length ? p : [{ text:'' }] };
+      });
+    }
 
     try{
-      const url = 'https://generativelanguage.googleapis.com/v1beta/models/'
-                + GEMINI_MODEL + ':generateContent';
+      const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent';
       const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type':'application/json', 'x-goog-api-key': GEMINI_API_KEY },
-        body: JSON.stringify({ contents })
+        method:'POST',
+        headers:{ 'Content-Type':'application/json', 'x-goog-api-key': GEMINI_API_KEY },
+        body: JSON.stringify({ contents, safetySettings: SAFETY_OFF })
       });
       const data = await res.json();
       thinking.remove();
 
       if(!res.ok){
-        const msg = (data && data.error && data.error.message) ? data.error.message : ('오류 ' + res.status);
+        const msg = data?.error?.message || ('오류 ' + res.status);
         gemAddBubble('ai', '⚠️ ' + msg, 'error');
         gemBusy = false; gemSend.disabled = false; return;
       }
-      const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || '(응답이 비어 있어요)';
-      gemAddBubble('ai', reply);
-      gemHistory.push({ role:'model', text: reply }); gemSave();
+
+      // 응답 파트에서 텍스트/이미지 추출
+      const partsOut = data?.candidates?.[0]?.content?.parts || [];
+      let replyText = '', genImg = null;
+      for(const p of partsOut){
+        if(p.text) replyText += p.text;
+        const inl = p.inline_data || p.inlineData;
+        if(inl && inl.data){
+          const mime = inl.mime_type || inl.mimeType || 'image/png';
+          genImg = 'data:' + mime + ';base64,' + inl.data;
+        }
+      }
+      if(!replyText && !genImg) replyText = '(응답이 비어 있어요. 안전필터에 막혔을 수 있어요.)';
+
+      gemAddBubble('ai', replyText, null, genImg, !!genImg);
+      h.push({ role:'model', text:replyText, img:genImg, saveable:!!genImg }); gemSave();
     }catch(err){
       thinking.remove();
-      gemAddBubble('ai', '⚠️ 연결 실패: ' + err.message + '\n인터넷 연결을 확인하거나, 파일을 직접 열지 말고 웹사이트에서 열어보세요.', 'error');
+      gemAddBubble('ai', '⚠️ 연결 실패: ' + err.message + '\n웹사이트(https)에서 열었는지 확인해주세요.', 'error');
     }
-    gemBusy = false; gemSend.disabled = false;
-    gemInput.focus();
+    gemBusy = false; gemSend.disabled = false; gemInput.focus();
   }
 
-  // 입력창 자동 높이
   gemInput.addEventListener('input', ()=>{
     gemInput.style.height = 'auto';
     gemInput.style.height = Math.min(120, gemInput.scrollHeight) + 'px';
   });
-  // Enter=전송, Shift+Enter=줄바꿈
   gemInput.addEventListener('keydown', (e)=>{
     e.stopPropagation();
     if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); gemSendMessage(); }
   });
   gemSend.addEventListener('click', gemSendMessage);
-  $('gemini-btn').addEventListener('click', openGemini);
+  $('gemini-btn').addEventListener('click', ()=> openGeminiMode('chat'));
+  $('gemini-custom-btn').addEventListener('click', ()=> openGeminiMode('custom'));
   $('gemini-close').addEventListener('click', closeGemini);
   $('home-btn').addEventListener('click', goMain);
   $('gemini-clear').addEventListener('click', ()=>{
-    if(confirm('대화 기록을 모두 지울까요?')){
-      gemHistory = []; gemSave(); gemRender();
+    if(confirm('이 대화 기록을 모두 지울까요?')){
+      histories[gemMode] = []; gemSave(); gemRender();
     }
   });
+
+  /* ── 커스텀 컬렉션 (생성물 저장/보기) ── */
+  const CUSTOM_KEY = 'secret_puzzle_custom_collection';
+  const customScreen = $('custom-collection-screen'), customGrid = $('custom-grid');
+
+  function loadCustom(){
+    try{ const r = localStorage.getItem(CUSTOM_KEY); const a = r ? JSON.parse(r) : []; return Array.isArray(a)?a:[]; }
+    catch(e){ return []; }
+  }
+  function saveCustom(item){   // { type:'image'|'video', url }
+    try{
+      const list = loadCustom();
+      list.push(item);
+      localStorage.setItem(CUSTOM_KEY, JSON.stringify(list));
+    }catch(e){ alert('저장 공간이 부족할 수 있어요.'); }
+  }
+  function openCustomCollection(){
+    setAppRatio(1);
+    showOnly(customScreen);
+    customGrid.innerHTML = '';
+    const list = loadCustom();
+    if(!list.length){
+      customGrid.innerHTML = '<div class="empty">아직 저장된 커스텀이 없습니다</div>';
+      return;
+    }
+    list.forEach((item)=>{
+      if(item.type === 'video'){
+        const card = document.createElement('div'); card.className = 'card';
+        const v = document.createElement('video'); v.src = item.url; v.muted = true; v.preload = 'metadata';
+        const badge = document.createElement('div'); badge.className = 'badge';
+        badge.innerHTML = '<svg viewBox="0 0 24 24" fill="#fff"><polygon points="8 5 19 12 8 19"/></svg>';
+        card.append(v, badge);
+        card.addEventListener('click', ()=> playVideo(item.url));
+        customGrid.appendChild(card);
+      } else {
+        const img = document.createElement('img');
+        img.src = item.url; img.draggable = false;
+        // 커스텀 사진은 퍼즐 없이 바로 자세히보기
+        img.addEventListener('click', ()=>{ fromCollection = false; showSolvedDirect(item.url); });
+        customGrid.appendChild(img);
+      }
+    });
+  }
+  // 퍼즐/컬렉션 저장 로직 없이 그냥 자세히보기
+  function showSolvedDirect(url){
+    const tmp = new Image();
+    tmp.onload = ()=>{
+      setAppRatio(1); resetZoom(); solvedImg.src = url;
+      showOnly(solvedScreen); photoFullReturn = true; enterFullscreen();
+      // 닫으면 커스텀 컬렉션으로 돌아오도록 표시
+      solvedReturn = openCustomCollection;
+    };
+    tmp.onerror = ()=>{ alert('이미지를 불러오지 못했습니다.'); openCustomCollection(); };
+    tmp.src = url;
+  }
+  $('custom-collection-btn').addEventListener('click', openCustomCollection);
+  $('custom-collection-back').addEventListener('click', goMain);
+
+  // wipeCollection();
 
   layoutApp();
   goMain();
