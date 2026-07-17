@@ -1,0 +1,1144 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>secret puzzle</title>
+<style>
+  /* ══════════ 디자인 토큰 (여기만 고치면 전체 톤이 바뀝니다) ══════════ */
+  :root{
+    --bg:      #000;
+    --fg:      #fff;
+    --line:    rgba(255,255,255,0.22);   /* 기본 헤어라인 */
+    --line-on: rgba(255,255,255,0.75);   /* 강조 라인 */
+    --hover:   rgba(255,255,255,0.08);
+    --press:   rgba(255,255,255,0.20);
+    --muted:   rgba(255,255,255,0.42);
+    --btn:     40px;    /* 모든 아이콘 버튼 크기 */
+    --gap:     8px;
+    --pad:     20px;
+    --mono:    ui-monospace, "Cascadia Mono", Consolas, "D2Coding", "Malgun Gothic", monospace;
+  }
+
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html,body{
+    height:100%;
+    background:#0a0a0a; color:var(--fg);
+    font-family:var(--mono);
+    display:flex; align-items:center; justify-content:center;
+    overflow:hidden;
+  }
+  #app{
+    position:relative;
+    /* 크기는 JS(layoutApp)가 계산합니다. 항상 화면 안에 들어오도록 보장 */
+    width:92vmin; height:92vmin;
+    background:var(--bg);
+    border:1px solid var(--line);
+    overflow:hidden;
+    user-select:none;
+    transition:width .25s ease, height .25s ease;
+  }
+  /* 진짜 전체화면(F11식)일 때: 모니터 꽉 채우고, 안의 사진/영상은 비율대로 */
+  #app:fullscreen{
+    width:100vw; height:100vh; border:none;
+    background:#000;
+    display:flex; align-items:center; justify-content:center;
+  }
+  #app:fullscreen #solved-screen,
+  #app:fullscreen #video-screen{
+    inset:0;
+  }
+
+  /* ══════════ 공통 버튼 (전부 같은 규격) ══════════ */
+  .btn{
+    width:var(--btn); height:var(--btn);
+    flex:0 0 auto;
+    border:1px solid var(--line);
+    background:transparent;
+    color:var(--fg);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+    transition:background .12s ease, border-color .12s ease;
+  }
+  .btn:hover{ background:var(--hover); border-color:var(--line-on); }
+  .btn:active{ background:var(--press); }
+  .btn svg{ width:18px; height:18px; }
+  .btn:focus-visible{ outline:1px solid var(--fg); outline-offset:2px; }
+
+  /* 글씨가 필요한 버튼도 같은 높이·같은 선 */
+  .btn-text{
+    height:var(--btn);
+    padding:0 14px;
+    border:1px solid var(--line);
+    background:transparent; color:var(--fg);
+    font:inherit; font-size:12px; letter-spacing:.08em;
+    display:flex; align-items:center;
+    cursor:pointer;
+    transition:background .12s ease, border-color .12s ease;
+  }
+  .btn-text:hover{ background:var(--hover); border-color:var(--line-on); }
+  .btn-text:active{ background:var(--press); }
+  .btn-text:focus-visible{ outline:1px solid var(--fg); outline-offset:2px; }
+
+  .label{ font-size:11px; letter-spacing:.18em; color:var(--muted); text-transform:uppercase; }
+
+  /* ══════════ 메인 화면 ══════════ */
+  #main-screen{ position:absolute; inset:0; outline:none; }
+
+  /* 시그니처: 화면 정중앙 세로 헤어라인 */
+  #main-screen::after{
+    content:''; position:absolute; top:22%; bottom:22%; left:50%;
+    width:1px; background:var(--line); opacity:.5;
+  }
+
+  #keys{
+    position:absolute; inset:0;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:0 12%;
+  }
+  .key{
+    width:20%; aspect-ratio:1/1;
+    border:1px solid var(--line);
+    background:transparent;
+    display:flex; align-items:center; justify-content:center;
+    transition:background .07s linear, border-color .07s linear;
+  }
+  .key svg{ width:34%; height:34%; }
+  .key.pressed{
+    background:var(--press);
+    border-color:var(--fg);
+  }
+
+  #main-nav{
+    position:absolute; top:var(--pad); right:var(--pad);
+    display:flex; gap:var(--gap);
+  }
+  #hint-line{
+    position:absolute; left:0; right:0; bottom:var(--pad);
+    text-align:center;
+  }
+
+  /* ══════════ 모달 ══════════ */
+  #code-modal{
+    position:absolute; inset:0; z-index:20;
+    background:rgba(0,0,0,.82);
+    display:none; align-items:center; justify-content:center;
+  }
+  #code-modal.show{ display:flex; }
+  .modal-box{
+    width:min(320px, 80%);
+    border:1px solid var(--line-on);
+    background:var(--bg);
+    padding:26px 22px;
+    display:flex; flex-direction:column; align-items:center; gap:18px;
+  }
+  .modal-box p{ font-size:13px; letter-spacing:.06em; color:var(--fg); }
+  /* 버튼을 세로로 쌓음 — 조각 수 등 선택지가 많아도 깔끔 */
+  .modal-btns{ display:flex; flex-direction:column; gap:8px; width:100%; }
+  .modal-btns .btn-text{ width:100%; justify-content:center; }
+  .modal-cancel{
+    background:transparent; border:none; color:var(--muted);
+    font:inherit; font-size:11px; letter-spacing:.08em;
+    cursor:pointer; padding:4px;
+  }
+  .modal-cancel:hover{ color:var(--fg); }
+
+  /* ══════════ 퍼즐 화면 ══════════ */
+  #puzzle-screen{
+    position:absolute; inset:0; display:none;
+    align-items:center; justify-content:center;
+    background:var(--bg); z-index:6;
+  }
+  #puzzle-screen.show{ display:flex; }
+  #puzzle-frame{
+    width:74%; aspect-ratio:1/1;
+    border:1px solid var(--line-on);
+    padding:6px;
+    position:relative;
+  }
+  #puzzle-grid{
+    width:100%; height:100%;
+    display:grid;
+    /* 조각 수는 JS가 --n 값으로 정합니다 (3 → 9피스, 4 → 16피스 ...) */
+    grid-template-columns:repeat(var(--n,3),1fr);
+    grid-template-rows:repeat(var(--n,3),1fr);
+    gap:1px;
+    background:var(--line);
+  }
+  .piece{
+    background-color:var(--bg);
+    cursor:grab;
+    /* background-size / position 은 JS가 조각마다 지정 */
+  }
+  .piece:active{ cursor:grabbing; }
+  .piece.drag-over{ outline:1px solid var(--fg); outline-offset:-1px; }
+  #crack-overlay{
+    position:absolute; inset:6px;
+    pointer-events:none;
+    transition:opacity .6s ease;
+  }
+  #puzzle-exit{ position:absolute; top:var(--pad); right:var(--pad); }
+  #puzzle-hint{
+    position:absolute; left:0; right:0; bottom:var(--pad);
+    text-align:center;
+  }
+
+  /* ══════════ 완성 사진 뷰어 ══════════ */
+  #solved-screen{
+    position:absolute; inset:0; display:none;
+    overflow:hidden; background:var(--bg); z-index:7;
+  }
+  #solved-screen.show{ display:block; }
+  #solved-img{
+    position:absolute; top:0; left:0; width:100%; height:100%;
+    object-fit:contain;              /* 잘리지 않고 전체가 보이도록 */
+    transform-origin:0 0; will-change:transform;
+  }
+  #close-corner{
+    position:absolute; top:0; right:0;
+    width:22%; height:22%;
+    display:flex; align-items:flex-start; justify-content:flex-end;
+    padding:var(--pad);
+    z-index:10;
+  }
+  #close-x{
+    opacity:.35; transition:opacity .15s ease;
+    background:rgba(0,0,0,.5);
+  }
+  #close-corner:hover #close-x,
+  #close-x:focus-visible{ opacity:1; }
+
+  /* ══════════ 컬렉션 (사진 / 영상 공통) ══════════ */
+  .sheet{
+    position:absolute; inset:0; display:none;
+    background:var(--bg);
+    flex-direction:column;
+    padding:var(--pad);
+    z-index:8;
+  }
+  .sheet.show{ display:flex; }
+  .sheet-head{
+    display:flex; align-items:center; justify-content:space-between;
+    padding-bottom:14px;
+    border-bottom:1px solid var(--line);
+    margin-bottom:14px;
+  }
+  .grid{
+    flex:1; overflow-y:auto;
+    display:grid; grid-template-columns:repeat(3,1fr); gap:var(--gap);
+    align-content:start;
+  }
+  .grid::-webkit-scrollbar{ width:4px; }
+  .grid::-webkit-scrollbar-thumb{ background:var(--line); }
+  .grid img{
+    width:100%; aspect-ratio:1/1; object-fit:cover;
+    border:1px solid var(--line);
+    cursor:pointer;
+    transition:border-color .12s ease, opacity .12s ease;
+  }
+  .grid img:hover{ border-color:var(--fg); opacity:.85; }
+  .empty{
+    grid-column:1/-1;
+    text-align:center; margin-top:22%;
+    font-size:12px; line-height:1.9; color:var(--muted);
+  }
+
+  .card{
+    position:relative; width:100%; aspect-ratio:1/1;
+    border:1px solid var(--line); background:var(--bg);
+    cursor:pointer; overflow:hidden;
+    transition:border-color .12s ease;
+  }
+  .card:hover{ border-color:var(--fg); }
+  .card video{ width:100%; height:100%; object-fit:cover; pointer-events:none; }
+  .card .badge{
+    position:absolute; inset:0;
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(0,0,0,.4);
+    transition:background .12s ease;
+  }
+  .card:hover .badge{ background:rgba(0,0,0,.15); }
+  .card .badge svg{ width:22%; height:22%; }
+
+  /* ══════════ 영상 플레이어 ══════════ */
+  #video-screen{ position:absolute; inset:0; display:none; background:var(--bg); z-index:9; }
+  #video-screen.show{ display:block; }
+  #video-el{
+    position:absolute; inset:0; width:100%; height:100%;
+    object-fit:contain; background:var(--bg);
+    transform-origin:0 0; will-change:transform;   /* 우클릭 돋보기 확대용 */
+  }
+
+  /* 컨트롤 자동 숨김: 바·닫기·전체화면 모두 커서 멈추면 사라짐 */
+  #video-screen.hidectrl #video-ui,
+  #video-screen.hidectrl #v-close,
+  #video-screen.hidectrl #v-full{ opacity:0; pointer-events:none; }
+  #video-ui, #v-close, #v-full{ transition:opacity .18s ease; }
+  /* 컨트롤 숨김 시 커서도 숨김 (유튜브식). 돋보기 확대 중엔 유지 */
+  #video-screen.hidectrl{ cursor:none; }
+
+  /* 닫기(✕): 항상 화면 오른쪽 위 */
+  #v-close{
+    position:absolute; top:var(--pad); right:var(--pad); z-index:6;
+  }
+  /* 전체화면(⛶): 닫기 왼쪽 */
+  #v-full{
+    position:absolute; top:var(--pad); right:calc(var(--pad) + var(--btn) + var(--gap));
+    z-index:6;
+  }
+
+  /* 하단 재생바 — 재생위치 + 버튼들(뒤로/재생/앞/다음) */
+  #video-ui{
+    position:absolute; left:0; right:0; bottom:0; z-index:4;
+    padding:var(--pad);
+    background:linear-gradient(to top, rgba(0,0,0,.85), rgba(0,0,0,0));
+    display:flex; flex-direction:column; gap:10px;
+  }
+  #seek{
+    height:3px; background:rgba(255,255,255,.28); cursor:pointer;
+    position:relative;
+  }
+  #seek:hover{ height:5px; margin-top:-1px; }
+  #seek-fill{ height:100%; width:0%; background:#fff; }
+  #bar-row{ display:flex; align-items:center; gap:14px; }
+  #time-label{ font-size:11px; color:rgba(255,255,255,.8); letter-spacing:.05em; margin-left:auto; }
+  .barbtn{
+    background:transparent; border:none; color:#fff;
+    cursor:pointer; font-size:18px; line-height:1; padding:2px;
+    transition:transform .08s ease, opacity .12s ease;
+    opacity:.9;
+  }
+  .barbtn:hover{ opacity:1; transform:scale(1.15); }
+  .barbtn:active{ transform:scale(.9); }
+  .barbtn.play{ font-size:22px; }
+
+  /* ══════════ 다음 영상 확인 화면 (별도 페이지) ══════════ */
+  #next-ask{
+    position:absolute; inset:0; display:none; z-index:11;
+    background:var(--bg);
+    flex-direction:column; align-items:center; justify-content:center; gap:20px;
+    padding:var(--pad);
+  }
+  #next-ask.show{ display:flex; }
+  #next-ask .q{ font-size:14px; letter-spacing:.04em; color:var(--fg); text-align:center; }
+  #next-thumb{
+    width:min(52%, 240px); aspect-ratio:1/1;
+    border:1px solid var(--line);
+    background:var(--bg); overflow:hidden;
+    position:relative;
+  }
+  #next-thumb video{ width:100%; height:100%; object-fit:cover; pointer-events:none; }
+  #next-thumb .badge{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    background:rgba(0,0,0,.4);
+  }
+  #next-thumb .badge svg{ width:22%; height:22%; }
+  #next-ask .ask-btns{ display:flex; gap:10px; }
+  #next-ask .ask-btns .btn-text{ min-width:96px; justify-content:center; }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ transition:none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ── 메인 ── -->
+  <div id="main-screen" tabindex="0">
+    <div id="keys">
+      <div class="key" id="left-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 5 8 12 15 19"/></svg>
+      </div>
+      <div class="key" id="right-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 5 16 12 9 19"/></svg>
+      </div>
+    </div>
+
+    <div id="main-nav">
+      <button class="btn-text" id="collection-btn">사진</button>
+      <button class="btn-text" id="video-collection-btn">영상</button>
+    </div>
+
+    <div id="hint-line" class="label">방향키를 눌러보세요</div>
+  </div>
+
+  <!-- ── 선택 모달 (사진 보기 / 조각 수 / 사진 클릭 시 등 공용) ── -->
+  <div id="code-modal">
+    <div class="modal-box">
+      <p id="modal-title">사진을 보시겠습니까?</p>
+      <div class="modal-btns" id="modal-btns"></div>
+      <button class="modal-cancel" id="modal-cancel">취소</button>
+    </div>
+  </div>
+
+  <!-- ── 퍼즐 ── -->
+  <div id="puzzle-screen">
+    <div id="puzzle-frame">
+      <div id="puzzle-grid"></div>
+      <svg id="crack-overlay" viewBox="0 0 300 300" preserveAspectRatio="none"></svg>
+    </div>
+    <button class="btn" id="puzzle-exit" title="나가기">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+    </button>
+    <div id="puzzle-hint" class="label">조각을 드래그해서 맞추세요</div>
+  </div>
+
+  <!-- ── 완성 사진 ── -->
+  <div id="solved-screen">
+    <img id="solved-img" draggable="false" alt="">
+    <div id="close-corner">
+      <button class="btn" id="close-x" title="닫기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ── 사진 컬렉션 ── -->
+  <div id="collection-screen" class="sheet">
+    <div class="sheet-head">
+      <span class="label">사진 컬렉션</span>
+      <button class="btn" id="collection-back" title="닫기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="grid" id="collection-grid"></div>
+  </div>
+
+  <!-- ── 영상 컬렉션 ── -->
+  <div id="video-collection-screen" class="sheet">
+    <div class="sheet-head">
+      <span class="label">영상 컬렉션</span>
+      <button class="btn" id="video-collection-back" title="닫기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="grid" id="video-grid"></div>
+  </div>
+
+  <!-- ── 영상 플레이어 ── -->
+  <div id="video-screen">
+    <video id="video-el" playsinline preload="auto"></video>
+
+    <!-- 닫기: 항상 오른쪽 위 -->
+    <button id="v-close" class="btn" title="닫기">✕</button>
+    <!-- 전체화면: 닫기 왼쪽 -->
+    <button id="v-full" class="btn" title="전체화면">⛶</button>
+
+    <!-- 하단 바: 재생위치 + 버튼(뒤로/재생/앞/다음) -->
+    <div id="video-ui">
+      <div id="seek"><div id="seek-fill"></div></div>
+      <div id="bar-row">
+        <button class="barbtn" id="v-back5" title="5초 뒤로">⏪</button>
+        <button class="barbtn play" id="v-play" title="재생 / 일시정지"><span id="v-play-icon">⏸</span></button>
+        <button class="barbtn" id="v-fwd5" title="5초 앞으로">⏩</button>
+        <button class="barbtn" id="v-next" title="다음 영상 (랜덤)">⏭</button>
+        <span id="time-label">0:00 / 0:00</span>
+      </div>
+    </div>
+
+    <!-- 다음 영상 확인 (별도 페이지) -->
+    <div id="next-ask">
+      <div class="q">다음 영상으로 넘어갈까요?</div>
+      <div id="next-thumb"></div>
+      <div class="ask-btns">
+        <button class="btn-text" id="next-yes">예</button>
+        <button class="btn-text" id="next-no">아니요</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+
+  /* ══════════════════════════════════════════════════════════
+     ▼▼▼ 사진 목록 ▼▼▼
+     photos 폴더에 넣은 파일 이름을 아래에 적으세요.
+     쉼표 → 줄바꿈 → "photos/파일이름"  으로 계속 추가합니다.
+     ※ 퍼즐을 열 때마다 이 목록에서 랜덤으로 한 장이 나옵니다.
+     ※ 새 사진은 반드시 '맨 뒤'에 추가하세요. (컬렉션 순서 유지)
+     ══════════════════════════════════════════════════════════ */
+  const PHOTOS = [
+    "photos/1.png",
+    "photos/2.png",
+    "photos/3.png",
+    "photos/4.png"
+  ];
+  /* ▲▲▲ 사진 끝 ▲▲▲ */
+
+
+  /* ══════════════════════════════════════════════════════════
+     ▼▼▼ 영상 목록 ▼▼▼
+     videos 폴더에 넣은 파일 이름을 아래에 적으세요.
+     여기 넣은 영상은 '영상 컬렉션'에 바로 나타납니다.
+     ══════════════════════════════════════════════════════════ */
+  const VIDEOS = [
+    "videos/1.mp4",
+    "videos/2.mp4",
+    "videos/3.mp4",
+    "videos/4.mp4",
+    "videos/5.mp4"
+  ];
+  /* ▲▲▲ 영상 끝 ▲▲▲ */
+
+
+  /* ---------- 요소 ---------- */
+  const $ = id => document.getElementById(id);
+  const app = $('app');
+  const mainScreen = $('main-screen');
+  const leftBtn = $('left-btn'), rightBtn = $('right-btn');
+  const codeModal = $('code-modal');
+  const modalTitle = $('modal-title'), modalBtns = $('modal-btns'), modalCancel = $('modal-cancel');
+
+  const puzzleScreen = $('puzzle-screen'), puzzleGrid = $('puzzle-grid');
+  const crackOverlay = $('crack-overlay'), puzzleExit = $('puzzle-exit');
+
+  const solvedScreen = $('solved-screen'), solvedImg = $('solved-img');
+  const closeCorner = $('close-corner');
+
+  const collectionScreen = $('collection-screen'), collectionGrid = $('collection-grid');
+  const videoCollectionScreen = $('video-collection-screen'), videoGrid = $('video-grid');
+
+  const videoScreen = $('video-screen'), videoEl = $('video-el');
+  const vPlayIcon = $('v-play-icon');
+  const seek = $('seek'), seekFill = $('seek-fill');
+
+  let N = 3;   // 한 변의 조각 수 (3→9피스, 4→16피스, 5→25피스, 6→36피스)
+  const SCREENS = [puzzleScreen, solvedScreen, collectionScreen, videoCollectionScreen, videoScreen];
+
+  /* ---------- 공용 선택 모달 ----------
+     openModal({ title, options:[{label, onClick}], onCancel }) */
+  function openModal(cfg){
+    modalTitle.textContent = cfg.title || '';
+    modalBtns.innerHTML = '';
+    (cfg.options || []).forEach(opt=>{
+      const b = document.createElement('button');
+      b.className = 'btn-text';
+      b.textContent = opt.label;
+      b.addEventListener('click', ()=>{ closeModal(); opt.onClick && opt.onClick(); });
+      modalBtns.appendChild(b);
+    });
+    modalCancel.onclick = ()=>{ closeModal(); cfg.onCancel && cfg.onCancel(); };
+    codeModal.classList.add('show');
+  }
+  function closeModal(){ codeModal.classList.remove('show'); }
+
+  /* 조각 수 선택창 → 고르면 cb(n) 호출 */
+  const PIECE_OPTIONS = [
+    { label: '9 피스 (3 × 3)',  n: 3 },
+    { label: '16 피스 (4 × 4)', n: 4 },
+    { label: '25 피스 (5 × 5)', n: 5 },
+    { label: '36 피스 (6 × 6)', n: 6 }
+  ];
+  function askPieceCount(cb, onCancel){
+    openModal({
+      title: '조각 수를 선택하세요',
+      options: PIECE_OPTIONS.map(o => ({ label: o.label, onClick: ()=> cb(o.n) })),
+      onCancel
+    });
+  }
+
+  /* ---------- 화면 크기 (항상 브라우저 안에 들어오도록) ----------
+     가로가 긴 사진이든 세로가 긴 사진이든, 잘리거나 화면 밖으로
+     넘어가지 않게 가로·세로 최대치를 넘지 않는 크기를 직접 계산합니다. */
+  let appRatio = 1;                       // 가로 / 세로
+  function setAppRatio(r){
+    appRatio = (isFinite(r) && r > 0) ? r : 1;
+    layoutApp();
+  }
+  function layoutApp(){
+    const maxW = window.innerWidth  * 0.92;
+    const maxH = window.innerHeight * 0.92;
+    let w = maxW, h = w / appRatio;
+    if(h > maxH){ h = maxH; w = h * appRatio; }
+    app.style.width  = Math.round(w) + 'px';
+    app.style.height = Math.round(h) + 'px';
+  }
+  window.addEventListener('resize', layoutApp);
+
+  /* ---------- 진짜 전체화면 (F11식) ----------
+     브라우저 Fullscreen API. 사용자 동작(클릭·키)이 있어야 진입 가능. */
+  function enterFullscreen(){
+    const el = app;
+    const fn = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+    if(fn && !isFullscreen()){ try{ fn.call(el); }catch(e){} }
+  }
+  function exitFullscreen(){
+    if(!isFullscreen()) return;
+    const fn = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
+    if(fn){ try{ fn.call(document); }catch(e){} }
+  }
+  function isFullscreen(){
+    return !!(document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement);
+  }
+  document.addEventListener('fullscreenchange', ()=>{
+    if(!isFullscreen()){
+      // 사진을 보다가 ESC/F11로 전체화면을 나가면 → 이전 화면으로 복귀
+      if(solvedScreen.classList.contains('show') && photoFullReturn){
+        photoFullReturn = false;
+        if(fromCollection){ fromCollection = false; openCollection(); }
+        else goMain();
+        return;
+      }
+      layoutApp();
+      applyVideoLayout && applyVideoLayout();
+    } else {
+      layoutApp();
+    }
+  });
+
+  function showOnly(el){
+    SCREENS.forEach(s => s.classList.remove('show'));
+    if(el && el !== mainScreen) el.classList.add('show');
+  }
+  function onMain(){ return !SCREENS.some(s => s.classList.contains('show')); }
+
+  function goMain(){
+    stopVideo();
+    codeModal.classList.remove('show');
+    showOnly(mainScreen);
+    setAppRatio(1);
+    mainScreen.focus();
+  }
+
+  /* ---------- 암호 시퀀스 ---------- */
+  const CODE = ['Left','Left','Right','Right','Left','Right','Right','Right'];
+  let buffer = [];
+
+  document.addEventListener('keydown', (e)=>{
+    if(videoScreen.classList.contains('show')){
+      // 확인 화면(다음 영상)이 떠 있으면 키 무시
+      if(nextAsk.classList.contains('show')){
+        if(e.key === 'Escape'){ $('next-no').click(); }
+        return;
+      }
+      if(e.key === ' '){ e.preventDefault(); togglePlay(); }
+      else if(e.key === 'ArrowLeft'){ e.preventDefault(); seekBy(-5); }
+      else if(e.key === 'ArrowRight'){ e.preventDefault(); seekBy(5); }
+      else if(e.key === 'f' || e.key === 'F'){ toggleFull(); }
+      else if(e.key === 'n' || e.key === 'N'){ playNextRandom(); }
+      else if(e.key === 'Escape'){
+        if(isFullscreen()) exitFullscreen();   // 전체화면이면 먼저 나가기
+        else closeVideo();
+      }
+      showControls();
+      return;
+    }
+    if(!onMain()){
+      if(e.key === 'Escape') goMain();
+      return;
+    }
+
+    if(codeModal.classList.contains('show')){
+      if(e.key === 'Escape' && modalCancel.onclick) modalCancel.onclick();
+      return;
+    }
+
+    if(e.key === 'ArrowLeft')  leftBtn.classList.add('pressed');
+    if(e.key === 'ArrowRight') rightBtn.classList.add('pressed');
+
+    if(e.key === 'ArrowLeft' || e.key === 'ArrowRight'){
+      buffer.push(e.key === 'ArrowLeft' ? 'Left' : 'Right');
+      if(buffer.length > CODE.length) buffer.shift();
+      if(buffer.length === CODE.length && buffer.every((v,i)=> v === CODE[i])){
+        buffer = [];
+        openCodeSuccessModal();
+      }
+    }
+  });
+  document.addEventListener('keyup', (e)=>{
+    if(e.key === 'ArrowLeft')  leftBtn.classList.remove('pressed');
+    if(e.key === 'ArrowRight') rightBtn.classList.remove('pressed');
+  });
+  mainScreen.addEventListener('click', ()=> mainScreen.focus());
+
+  // 암호 성공 → "사진 보기 / 닫기" 선택창
+  function openCodeSuccessModal(){
+    openModal({
+      title: '사진을 보시겠습니까?',
+      options: [
+        { label: '사진 보기', onClick: startNewPuzzleFlow }
+      ],
+      onCancel: goMain
+    });
+  }
+
+  // 새 퍼즐 풀기: 아직 안 모은 사진 중 랜덤 → 조각 수 선택 → 퍼즐 시작
+  function startNewPuzzleFlow(){
+    const owned = loadCollection();
+    const candidates = [];
+    PHOTOS.forEach((u, i)=>{
+      if(typeof u === 'string' && u.trim().length > 2 && !owned.includes(i)) candidates.push(i);
+    });
+
+    if(PHOTOS.length === 0){
+      alert('코드의 PHOTOS 목록에 사진을 먼저 넣어주세요.');
+      goMain(); return;
+    }
+    if(candidates.length === 0){
+      alert('사진을 모두 모았습니다.\n컬렉션에서 사진을 골라 다시 풀 수 있어요.');
+      openCollection(); return;
+    }
+
+    const i = candidates[Math.floor(Math.random() * candidates.length)];
+    askPieceCount(
+      (n)=> startPuzzle(PHOTOS[i], i, n),
+      goMain
+    );
+  }
+
+  /* ---------- 퍼즐 ---------- */
+  function startPuzzle(url, imgIndex, pieceN){
+    N = pieceN || 3;
+    showOnly(puzzleScreen);
+    puzzleGrid.style.setProperty('--n', N);
+    puzzleGrid.innerHTML = '';
+    let order = [...Array(N*N).keys()];
+    do { shuffle(order); } while(order.every((v,i)=> v === i));
+
+    const bgSize = `${N*100}% ${N*100}%`;
+    order.forEach((home, slot)=>{
+      const d = document.createElement('div');
+      d.className = 'piece';
+      d.draggable = true;
+      d.dataset.home = home;
+      d.dataset.slot = slot;
+      const col = home % N, row = Math.floor(home / N);
+      d.style.backgroundImage = `url("${url}")`;
+      d.style.backgroundSize = bgSize;
+      d.style.backgroundPosition = `${col/(N-1)*100}% ${row/(N-1)*100}%`;
+
+      d.addEventListener('dragstart', e => e.dataTransfer.setData('text/plain', d.dataset.slot));
+      d.addEventListener('dragover',  e => { e.preventDefault(); d.classList.add('drag-over'); });
+      d.addEventListener('dragleave', () => d.classList.remove('drag-over'));
+      d.addEventListener('drop', (e)=>{
+        e.preventDefault();
+        d.classList.remove('drag-over');
+        const from = puzzleGrid.querySelector(`[data-slot="${e.dataTransfer.getData('text/plain')}"]`);
+        swap(from, d);
+        checkSolved(url, imgIndex);
+      });
+      puzzleGrid.appendChild(d);
+    });
+    drawCracks();
+  }
+
+  function shuffle(a){
+    for(let i=a.length-1;i>0;i--){
+      const j = Math.floor(Math.random()*(i+1));
+      [a[i],a[j]] = [a[j],a[i]];
+    }
+  }
+  function swap(a,b){
+    if(!a || a === b) return;
+    const as = a.dataset.slot;
+    a.dataset.slot = b.dataset.slot; b.dataset.slot = as;
+    const next = a.nextSibling === b ? a : a.nextSibling;
+    b.parentNode.insertBefore(a, b);
+    b.parentNode.insertBefore(b, next);
+  }
+  function checkSolved(url, imgIndex){
+    const ok = [...puzzleGrid.children].every((el,i)=> Number(el.dataset.home) === i);
+    if(ok){
+      crackOverlay.style.opacity = '0';
+      setTimeout(()=> showSolved(url, imgIndex), 550);
+    }
+  }
+  function drawCracks(){
+    crackOverlay.style.opacity = '1';
+    let out = '';
+    for(let i=0;i<6;i++){
+      let x = Math.random()*300, y = Math.random()*300;
+      let p = `M ${x.toFixed(1)} ${y.toFixed(1)}`;
+      const segs = 3 + Math.floor(Math.random()*3);
+      for(let s=0;s<segs;s++){
+        x = Math.max(0, Math.min(300, x + (Math.random()-0.5)*140));
+        y = Math.max(0, Math.min(300, y + (Math.random()-0.5)*140));
+        p += ` L ${x.toFixed(1)} ${y.toFixed(1)}`;
+      }
+      out += `<path d="${p}" stroke="rgba(255,255,255,0.55)" stroke-width="1" fill="none"/>`;
+    }
+    crackOverlay.innerHTML = out;
+  }
+  puzzleExit.addEventListener('click', goMain);
+
+  /* ---------- 완성 사진 ---------- */
+  let scale=1, tx=0, ty=0, zoomMode=false;
+  let panning=false, sx=0, sy=0, stx=0, sty=0;
+  let fromCollection = false;
+  let photoFullReturn = false;
+
+  function showSolved(url, imgIndex){
+    if(imgIndex >= 0 && !fromCollection) saveToCollection(imgIndex);
+    const tmp = new Image();
+    tmp.onload = ()=>{
+      setAppRatio(1);
+      resetZoom();
+      solvedImg.src = url;
+      showOnly(solvedScreen);
+      photoFullReturn = true;
+      enterFullscreen();         // 사진은 열면 바로 진짜 전체화면(F11식)
+    };
+    tmp.onerror = ()=>{
+      alert('사진을 불러오지 못했습니다.\n파일 이름과 photos 폴더 위치를 확인해주세요:\n' + url);
+      goMain();
+    };
+    tmp.src = url;
+  }
+  function resetZoom(){
+    scale=1; tx=0; ty=0; zoomMode=false;
+    solvedScreen.style.cursor = 'default';
+    applyT();
+  }
+  function applyT(){ solvedImg.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`; }
+
+  const lens = `url("data:image/svg+xml;utf8,${encodeURIComponent('<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'28\' height=\'28\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'white\' stroke-width=\'1.5\'><circle cx=\'10\' cy=\'10\' r=\'6\'/><line x1=\'15\' y1=\'15\' x2=\'21\' y2=\'21\'/></svg>')}") 12 12, zoom-in`;
+
+  solvedScreen.addEventListener('contextmenu', (e)=>{
+    e.preventDefault();
+    zoomMode = !zoomMode;
+    solvedScreen.style.cursor = zoomMode ? lens : 'default';
+  });
+  solvedScreen.addEventListener('wheel', (e)=>{
+    if(!zoomMode) return;
+    e.preventDefault();
+    const r = solvedScreen.getBoundingClientRect();
+    const mx = e.clientX - r.left, my = e.clientY - r.top, prev = scale;
+    scale = Math.min(5, Math.max(1, scale * (1 + (-e.deltaY * 0.0015))));
+    tx = mx - ((mx - tx)/prev) * scale;
+    ty = my - ((my - ty)/prev) * scale;
+    clamp(r); applyT();
+  }, { passive:false });
+  solvedScreen.addEventListener('mousedown', (e)=>{
+    if(!zoomMode || e.button !== 0) return;
+    panning = true; sx = e.clientX; sy = e.clientY; stx = tx; sty = ty;
+  });
+  window.addEventListener('mousemove', (e)=>{
+    if(!panning) return;
+    tx = stx + (e.clientX - sx); ty = sty + (e.clientY - sy);
+    clamp(solvedScreen.getBoundingClientRect()); applyT();
+  });
+  window.addEventListener('mouseup', ()=> panning = false);
+  function clamp(r){
+    tx = Math.min(0, Math.max(r.width  - r.width  * scale, tx));
+    ty = Math.min(0, Math.max(r.height - r.height * scale, ty));
+  }
+
+  closeCorner.addEventListener('click', ()=>{
+    photoFullReturn = false;
+    exitFullscreen();
+    if(fromCollection){ fromCollection = false; openCollection(); }
+    else goMain();
+  });
+
+  /* ---------- 사진 컬렉션 ---------- */
+  const STORE_KEY = 'secret_puzzle_collection';
+
+  function loadCollection(){
+    try{
+      const raw = localStorage.getItem(STORE_KEY);
+      const a = raw ? JSON.parse(raw) : [];
+      return Array.isArray(a) ? a : [];
+    }catch(e){ return []; }
+  }
+  function saveToCollection(i){
+    try{
+      const list = loadCollection();
+      if(!list.includes(i)){
+        list.push(i);
+        localStorage.setItem(STORE_KEY, JSON.stringify(list));
+      }
+    }catch(e){}
+  }
+
+  function openCollection(){
+    setAppRatio(1);
+    showOnly(collectionScreen);
+    collectionGrid.innerHTML = '';
+
+    const list = loadCollection().filter(i => PHOTOS[i]);
+    if(!list.length){
+      collectionGrid.innerHTML = '<div class="empty">아직 맞춘 퍼즐이 없습니다</div>';
+      return;
+    }
+    list.forEach(i=>{
+      const img = document.createElement('img');
+      img.src = PHOTOS[i];
+      img.draggable = false;
+      img.addEventListener('click', ()=> openCollectionItem(i));
+      collectionGrid.appendChild(img);
+    });
+  }
+  // 컬렉션 사진 클릭 → 자세히보기 / 퍼즐 맞추기 선택
+  function openCollectionItem(i){
+    openModal({
+      title: '무엇을 할까요?',
+      options: [
+        { label: '자세히 보기', onClick: ()=>{ fromCollection = true; showSolved(PHOTOS[i], i); } },
+        { label: '퍼즐 맞추기', onClick: ()=> askPieceCount(
+            (n)=> startPuzzle(PHOTOS[i], i, n),
+            openCollection      // 조각 수 창에서 취소하면 컬렉션으로 복귀
+          ) }
+      ],
+      onCancel: openCollection
+    });
+  }
+  $('collection-btn').addEventListener('click', openCollection);
+  $('collection-back').addEventListener('click', goMain);
+
+  /* ---------- 영상 컬렉션 ---------- */
+  function openVideoCollection(){
+    stopVideo();
+    setAppRatio(1);
+    showOnly(videoCollectionScreen);
+    videoGrid.innerHTML = '';
+
+    const list = VIDEOS.filter(u => typeof u === 'string' && u.trim().length > 2);
+    if(!list.length){
+      videoGrid.innerHTML = '<div class="empty">코드의 VIDEOS 목록에<br>영상을 넣어주세요</div>';
+      return;
+    }
+    list.forEach(url=>{
+      const card = document.createElement('div');
+      card.className = 'card';
+      const v = document.createElement('video');
+      v.src = url; v.muted = true; v.preload = 'metadata';
+      const badge = document.createElement('div');
+      badge.className = 'badge';
+      badge.innerHTML = '<svg viewBox="0 0 24 24" fill="#fff"><polygon points="8 5 19 12 8 19"/></svg>';
+      card.append(v, badge);
+      card.addEventListener('click', ()=> playVideo(url));
+      videoGrid.appendChild(card);
+    });
+  }
+  $('video-collection-btn').addEventListener('click', openVideoCollection);
+  $('video-collection-back').addEventListener('click', goMain);
+
+  /* ---------- 영상 플레이어 ---------- */
+  const vFull = $('v-full');
+  const timeLabel = $('time-label');
+  const nextAsk = $('next-ask'), nextThumb = $('next-thumb');
+  let videoList = [];          // 현재 재생 목록
+  let curVideoIdx = -1;        // 현재 영상 인덱스
+  let hideTimer = null;        // 컨트롤 자동 숨김 타이머
+  let pendingNextUrl = null;   // 확인 화면에서 재생 대기 중인 다음 영상
+
+  function currentVideoList(){
+    return VIDEOS.filter(u => typeof u === 'string' && u.trim().length > 2);
+  }
+
+  function playVideo(url){
+    videoList = currentVideoList();
+    curVideoIdx = videoList.indexOf(url);
+    nextAsk.classList.remove('show');
+    showOnly(videoScreen);
+    resetVideoZoom();
+    loadAndPlay(url);
+    showControls();
+  }
+
+  function loadAndPlay(url){
+    videoEl.src = url;
+    videoEl.currentTime = 0;
+    videoEl.play().catch(()=>{});
+  }
+
+  // 랜덤으로 다음 영상 인덱스 뽑기 (같은 것 연속 방지)
+  function pickNextIdx(){
+    const list = videoList.length ? videoList : currentVideoList();
+    if(!list.length) return -1;
+    let idx = Math.floor(Math.random() * list.length);
+    if(list.length > 1){ while(idx === curVideoIdx) idx = Math.floor(Math.random() * list.length); }
+    return idx;
+  }
+
+  // 다음 영상 즉시 재생 (⏭ 버튼)
+  function playNextRandom(){
+    const idx = pickNextIdx();
+    if(idx < 0) return;
+    const list = videoList.length ? videoList : currentVideoList();
+    curVideoIdx = idx;
+    resetVideoZoom();
+    loadAndPlay(list[idx]);
+    showControls();
+  }
+
+  function togglePlay(){
+    if(videoEl.paused) videoEl.play().catch(()=>{});
+    else videoEl.pause();
+  }
+  function seekBy(s){
+    if(!isFinite(videoEl.duration)) return;
+    videoEl.currentTime = Math.min(videoEl.duration, Math.max(0, videoEl.currentTime + s));
+    showControls();
+  }
+  function stopVideo(){
+    try{ videoEl.pause(); videoEl.removeAttribute('src'); videoEl.load(); }catch(e){}
+    seekFill.style.width = '0%';
+    clearTimeout(hideTimer);
+    videoScreen.classList.remove('hidectrl');
+    nextAsk.classList.remove('show');
+    resetVideoZoom();
+  }
+  function closeVideo(){ exitFullscreen(); stopVideo(); openVideoCollection(); }
+
+  // ── 화면 크기: 전체화면이면 영상 비율로 꽉, 아니면 정사각형 안에 ──
+  function applyVideoLayout(){
+    videoEl.style.objectFit = 'contain';
+    if(isFullscreen()){
+      vFull.textContent = '🗗';    // 축소 아이콘
+    } else {
+      setAppRatio(1);              // 작은 화면(정사각형)
+      vFull.textContent = '⛶';
+    }
+  }
+  // 전체화면 버튼 = 진짜 전체화면(F11식) 토글
+  function toggleFull(){
+    if(isFullscreen()) exitFullscreen();
+    else enterFullscreen();
+    setTimeout(applyVideoLayout, 60);
+    showControls();
+  }
+
+  // ── 컨트롤 표시 / 자동 숨김 (2초) ──
+  function showControls(){
+    videoScreen.classList.remove('hidectrl');
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(()=>{
+      if(!videoEl.paused && !vZoom) videoScreen.classList.add('hidectrl');
+    }, 2000);
+  }
+
+  // ── 영상 끝 → "다음 영상으로?" 확인 화면 ──
+  function askNextVideo(){
+    const idx = pickNextIdx();
+    if(idx < 0){ return; }               // 영상 없음
+    const list = videoList.length ? videoList : currentVideoList();
+    pendingNextUrl = list[idx];
+    curVideoIdx = idx;                   // 다음 후보로 지정
+
+    // 썸네일 = 영상 컬렉션과 똑같은 정사각형 카드
+    nextThumb.innerHTML = '';
+    const v = document.createElement('video');
+    v.src = pendingNextUrl; v.muted = true; v.preload = 'metadata';
+    const badge = document.createElement('div');
+    badge.className = 'badge';
+    badge.innerHTML = '<svg viewBox="0 0 24 24" fill="#fff"><polygon points="8 5 19 12 8 19"/></svg>';
+    nextThumb.append(v, badge);
+
+    videoScreen.classList.remove('hidectrl');
+    nextAsk.classList.add('show');
+  }
+
+  videoEl.addEventListener('loadedmetadata', ()=>{
+    applyVideoLayout();
+    updateTime();
+  });
+  const ICON_PAUSE = '⏸', ICON_PLAY = '▶';
+  videoEl.addEventListener('play',  ()=>{ vPlayIcon.textContent = ICON_PAUSE; showControls(); });
+  videoEl.addEventListener('pause', ()=>{ vPlayIcon.textContent = ICON_PLAY; showControls(); });
+  videoEl.addEventListener('ended', askNextVideo);   // 끝나면 확인 화면
+  videoEl.addEventListener('timeupdate', ()=>{
+    if(!isFinite(videoEl.duration) || !videoEl.duration) return;
+    seekFill.style.width = (videoEl.currentTime / videoEl.duration * 100) + '%';
+    updateTime();
+  });
+
+  // 확인 화면 버튼
+  $('next-yes').addEventListener('click', ()=>{
+    nextAsk.classList.remove('show');
+    if(pendingNextUrl){ resetVideoZoom(); loadAndPlay(pendingNextUrl); showControls(); }
+  });
+  $('next-no').addEventListener('click', ()=>{
+    nextAsk.classList.remove('show');
+    closeVideo();          // 다음 안 봄 → 영상 컬렉션으로
+  });
+
+  function fmt(t){
+    if(!isFinite(t)) t = 0;
+    const m = Math.floor(t/60), s = Math.floor(t%60);
+    return m + ':' + String(s).padStart(2,'0');
+  }
+  function updateTime(){ timeLabel.textContent = fmt(videoEl.currentTime) + ' / ' + fmt(videoEl.duration); }
+
+  // 마우스가 영상 화면 안에서 움직이면 컨트롤 등장
+  videoScreen.addEventListener('mousemove', showControls);
+  videoScreen.addEventListener('touchstart', showControls, { passive:true });
+
+  // 버튼들
+  $('v-play').addEventListener('click', (e)=>{ e.stopPropagation(); togglePlay(); });
+  $('v-back5').addEventListener('click', (e)=>{ e.stopPropagation(); seekBy(-5); });
+  $('v-fwd5').addEventListener('click',  (e)=>{ e.stopPropagation(); seekBy(5); });
+  $('v-next').addEventListener('click',  (e)=>{ e.stopPropagation(); playNextRandom(); });
+  vFull.addEventListener('click', (e)=>{ e.stopPropagation(); toggleFull(); });
+  $('v-close').addEventListener('click', (e)=>{ e.stopPropagation(); closeVideo(); });
+
+  seek.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    if(!isFinite(videoEl.duration)) return;
+    const r = seek.getBoundingClientRect();
+    videoEl.currentTime = ((e.clientX - r.left) / r.width) * videoEl.duration;
+    showControls();
+  });
+
+  // ── 우클릭 돋보기 확대 (사진과 동일) ──
+  let vScale=1, vtx=0, vty=0, vZoom=false, vPan=false, vsx=0, vsy=0, vstx=0, vsty=0;
+  function resetVideoZoom(){
+    vScale=1; vtx=0; vty=0; vZoom=false; vPan=false;
+    videoEl.style.transform = ''; videoEl.style.cursor='';
+  }
+  function vApplyT(){ videoEl.style.transform = `translate(${vtx}px,${vty}px) scale(${vScale})`; }
+  videoScreen.addEventListener('contextmenu', (e)=>{
+    e.preventDefault();
+    vZoom = !vZoom;
+    videoEl.style.cursor = vZoom ? lens : '';
+  });
+  videoScreen.addEventListener('wheel', (e)=>{
+    if(!vZoom) return;
+    e.preventDefault();
+    const r = videoEl.getBoundingClientRect();
+    const mx = e.clientX - r.left, my = e.clientY - r.top, prev = vScale;
+    vScale = Math.min(5, Math.max(1, vScale * (1 + (-e.deltaY * 0.0015))));
+    vtx = mx - ((mx - vtx)/prev) * vScale;
+    vty = my - ((my - vty)/prev) * vScale;
+    vClamp(r); vApplyT();
+  }, { passive:false });
+  videoEl.addEventListener('mousedown', (e)=>{
+    if(vZoom && e.button === 0){ vPan=true; vsx=e.clientX; vsy=e.clientY; vstx=vtx; vsty=vty; }
+  });
+  window.addEventListener('mousemove', (e)=>{
+    if(!vPan) return;
+    vtx = vstx + (e.clientX - vsx); vty = vsty + (e.clientY - vsy);
+    vClamp(videoEl.getBoundingClientRect()); vApplyT();
+  });
+  window.addEventListener('mouseup', ()=> vPan=false);
+  function vClamp(r){
+    vtx = Math.min(0, Math.max(r.width  - r.width  * vScale, vtx));
+    vty = Math.min(0, Math.max(r.height - r.height * vScale, vty));
+  }
+  // 확대 상태가 아닐 때만 클릭=재생/정지
+  videoEl.addEventListener('click', ()=>{ if(!vZoom) togglePlay(); });
+
+  /* ---------- 컬렉션 초기화 (필요할 때만) ----------
+     모은 기록을 전부 지우고 싶으면, 아래 wipeCollection(); 줄의
+     맨 앞 // 를 지우고 파일을 한 번 연 뒤, 다시 // 를 붙이세요. */
+  function wipeCollection(){
+    try{ localStorage.removeItem(STORE_KEY); }catch(e){}
+    try{ localStorage.removeItem('collection'); }catch(e){}
+    try{
+      if(window.storage && window.storage.delete){
+        window.storage.delete('collection', false).catch(()=>{});
+        window.storage.delete(STORE_KEY, false).catch(()=>{});
+      }
+    }catch(e){}
+  }
+  // wipeCollection();
+
+  layoutApp();
+  goMain();
+})();
+</script>
+</body>
+</html>
