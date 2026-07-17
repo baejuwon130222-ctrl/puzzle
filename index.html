@@ -112,10 +112,97 @@
     position:absolute; top:var(--pad); right:var(--pad);
     display:flex; gap:var(--gap);
   }
+  #main-nav-left{
+    position:absolute; top:var(--pad); left:var(--pad);
+    display:flex; gap:var(--gap); z-index:2;
+  }
   #hint-line{
     position:absolute; left:0; right:0; bottom:var(--pad);
     text-align:center;
   }
+
+  /* ══════════ Gemini 채팅 화면 (다크) ══════════ */
+  #gemini-screen{
+    position:absolute; inset:0; display:none; z-index:12;
+    background:#0d0d0f;
+    flex-direction:column;
+  }
+  #gemini-screen.show{ display:flex; }
+  #gemini-head{
+    flex:0 0 auto;
+    display:flex; align-items:center; gap:10px;
+    padding:14px var(--pad);
+    border-bottom:1px solid rgba(255,255,255,.08);
+  }
+  #gemini-head .dot{
+    width:22px; height:22px; border-radius:50%;
+    background:linear-gradient(135deg,#4b8bff,#a97bff);
+    flex:0 0 auto;
+  }
+  #gemini-head .title{ font-size:14px; color:#fff; letter-spacing:.02em; }
+  #gemini-head .spacer{ flex:1; }
+  #gemini-clear, #gemini-close{
+    background:transparent; border:1px solid rgba(255,255,255,.18);
+    color:#ccc; font:inherit; font-size:12px;
+    padding:6px 10px; border-radius:6px; cursor:pointer;
+  }
+  #gemini-clear:hover, #gemini-close:hover{ background:rgba(255,255,255,.08); color:#fff; }
+
+  #gemini-log{
+    flex:1; overflow-y:auto;
+    padding:18px var(--pad);
+    display:flex; flex-direction:column; gap:12px;
+  }
+  #gemini-log::-webkit-scrollbar{ width:5px; }
+  #gemini-log::-webkit-scrollbar-thumb{ background:rgba(255,255,255,.15); border-radius:3px; }
+  .msg{
+    max-width:78%;
+    padding:11px 14px; border-radius:14px;
+    font-size:13.5px; line-height:1.55; white-space:pre-wrap; word-break:break-word;
+  }
+  .msg.user{
+    align-self:flex-end;
+    background:#2563eb; color:#fff;
+    border-bottom-right-radius:4px;
+  }
+  .msg.ai{
+    align-self:flex-start;
+    background:#1c1c22; color:#eee;
+    border:1px solid rgba(255,255,255,.06);
+    border-bottom-left-radius:4px;
+  }
+  .msg.ai.thinking{ color:#888; font-style:italic; }
+  .msg.ai.error{ color:#ff8080; border-color:rgba(255,80,80,.3); }
+
+  #gemini-empty{
+    margin:auto; text-align:center; color:#555; font-size:13px; line-height:1.8;
+  }
+
+  #gemini-input-row{
+    flex:0 0 auto;
+    display:flex; gap:8px; align-items:flex-end;
+    padding:12px var(--pad);
+    border-top:1px solid rgba(255,255,255,.08);
+  }
+  #gemini-input{
+    flex:1; resize:none;
+    background:#1a1a1f; color:#fff;
+    border:1px solid rgba(255,255,255,.14); border-radius:10px;
+    padding:10px 12px; font:inherit; font-size:13.5px; line-height:1.5;
+    max-height:120px; min-height:42px;
+    outline:none;
+  }
+  #gemini-input:focus{ border-color:#4b8bff; }
+  #gemini-send{
+    flex:0 0 auto;
+    width:42px; height:42px; border-radius:10px;
+    border:none; background:#2563eb; color:#fff;
+    font-size:18px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    transition:background .12s ease, opacity .12s ease;
+  }
+  #gemini-send:hover{ background:#1d4fd8; }
+  #gemini-send:disabled{ opacity:.4; cursor:default; }
 
   /* ══════════ 모달 ══════════ */
   #code-modal{
@@ -301,6 +388,19 @@
   #seek-fill{ height:100%; width:0%; background:#fff; }
   #bar-row{ display:flex; align-items:center; gap:14px; }
   #time-label{ font-size:11px; color:rgba(255,255,255,.8); letter-spacing:.05em; margin-left:auto; }
+
+  /* 음량 슬라이더 */
+  #vol-track{
+    position:relative; width:70px; height:4px;
+    background:rgba(255,255,255,.28); border-radius:2px;
+    cursor:pointer; flex:0 0 auto;
+  }
+  #vol-fill{ height:100%; width:100%; background:#fff; border-radius:2px; }
+  #vol-knob{
+    position:absolute; top:50%; left:100%;
+    width:11px; height:11px; border-radius:50%; background:#fff;
+    transform:translate(-50%,-50%); cursor:grab;
+  }
   .barbtn{
     background:transparent; border:none; color:#fff;
     cursor:pointer; font-size:18px; line-height:1; padding:2px;
@@ -353,6 +453,11 @@
       <div class="key" id="right-btn">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 5 16 12 9 19"/></svg>
       </div>
+    </div>
+
+    <div id="main-nav-left">
+      <button class="btn-text" id="home-btn">메인화면</button>
+      <button class="btn-text" id="gemini-btn">Gemini</button>
     </div>
 
     <div id="main-nav">
@@ -433,6 +538,8 @@
         <button class="barbtn play" id="v-play" title="재생 / 일시정지"><span id="v-play-icon">⏸</span></button>
         <button class="barbtn" id="v-fwd5" title="5초 앞으로">⏩</button>
         <button class="barbtn" id="v-next" title="다음 영상 (랜덤)">⏭</button>
+        <button class="barbtn" id="v-mute" title="음소거">🔊</button>
+        <div id="vol-track" title="음량"><div id="vol-fill"></div><div id="vol-knob"></div></div>
         <span id="time-label">0:00 / 0:00</span>
       </div>
     </div>
@@ -445,6 +552,24 @@
         <button class="btn-text" id="next-yes">예</button>
         <button class="btn-text" id="next-no">아니요</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ── Gemini 채팅 화면 ── -->
+  <div id="gemini-screen">
+    <div id="gemini-head">
+      <div class="dot"></div>
+      <div class="title">Gemini</div>
+      <div class="spacer"></div>
+      <button id="gemini-clear">기록 삭제</button>
+      <button id="gemini-close">✕</button>
+    </div>
+    <div id="gemini-log">
+      <div id="gemini-empty">무엇이든 물어보세요.<br>대화는 이 브라우저에 저장됩니다.</div>
+    </div>
+    <div id="gemini-input-row">
+      <textarea id="gemini-input" rows="1" placeholder="메시지를 입력하세요…"></textarea>
+      <button id="gemini-send" title="보내기">➤</button>
     </div>
   </div>
 
@@ -477,9 +602,7 @@
   const VIDEOS = [
     "videos/1.mp4",
     "videos/2.mp4",
-    "videos/3.mp4",
-    "videos/4.mp4",
-    "videos/5.mp4"
+    "videos/3.mp4"
   ];
   /* ▲▲▲ 영상 끝 ▲▲▲ */
 
@@ -598,6 +721,8 @@
   function goMain(){
     stopVideo();
     codeModal.classList.remove('show');
+    const gs = document.getElementById('gemini-screen');
+    if(gs) gs.classList.remove('show');
     showOnly(mainScreen);
     setAppRatio(1);
     mainScreen.focus();
@@ -617,6 +742,9 @@
       if(e.key === ' '){ e.preventDefault(); togglePlay(); }
       else if(e.key === 'ArrowLeft'){ e.preventDefault(); seekBy(-5); }
       else if(e.key === 'ArrowRight'){ e.preventDefault(); seekBy(5); }
+      else if(e.key === 'ArrowUp'){ e.preventDefault(); setVolume((videoEl.muted?0:videoEl.volume) + 0.1); }
+      else if(e.key === 'ArrowDown'){ e.preventDefault(); setVolume((videoEl.muted?0:videoEl.volume) - 0.1); }
+      else if(e.key === 'm' || e.key === 'M'){ vMute.click(); }
       else if(e.key === 'f' || e.key === 'F'){ toggleFull(); }
       else if(e.key === 'n' || e.key === 'N'){ playNextRandom(); }
       else if(e.key === 'Escape'){
@@ -624,6 +752,10 @@
         else closeVideo();
       }
       showControls();
+      return;
+    }
+    if(document.getElementById('gemini-screen').classList.contains('show')){
+      if(e.key === 'Escape') closeGemini();
       return;
     }
     if(!onMain()){
@@ -1035,6 +1167,7 @@
   videoEl.addEventListener('loadedmetadata', ()=>{
     applyVideoLayout();
     updateTime();
+    updateVolUI();
   });
   const ICON_PAUSE = '⏸', ICON_PLAY = '▶';
   videoEl.addEventListener('play',  ()=>{ vPlayIcon.textContent = ICON_PAUSE; showControls(); });
@@ -1074,6 +1207,39 @@
   $('v-next').addEventListener('click',  (e)=>{ e.stopPropagation(); playNextRandom(); });
   vFull.addEventListener('click', (e)=>{ e.stopPropagation(); toggleFull(); });
   $('v-close').addEventListener('click', (e)=>{ e.stopPropagation(); closeVideo(); });
+
+  // ── 음량 조절 ──
+  const volTrack = $('vol-track'), volFill = $('vol-fill'), volKnob = $('vol-knob'), vMute = $('v-mute');
+  let lastVolume = 1;          // 음소거 해제 시 되돌릴 값
+  function updateVolUI(){
+    const v = videoEl.muted ? 0 : videoEl.volume;
+    const pct = v * 100;
+    volFill.style.width = pct + '%';
+    volKnob.style.left = pct + '%';
+    vMute.textContent = (videoEl.muted || v === 0) ? '🔇' : (v < 0.5 ? '🔉' : '🔊');
+  }
+  function setVolume(v){
+    v = Math.max(0, Math.min(1, v));
+    videoEl.volume = v;
+    videoEl.muted = (v === 0);
+    if(v > 0) lastVolume = v;
+    updateVolUI();
+  }
+  vMute.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    if(videoEl.muted || videoEl.volume === 0) setVolume(lastVolume || 1);
+    else { videoEl.muted = true; updateVolUI(); }
+    showControls();
+  });
+  let volDragging = false;
+  function volFromX(clientX){
+    const r = volTrack.getBoundingClientRect();
+    setVolume((clientX - r.left) / r.width);
+  }
+  volTrack.addEventListener('mousedown', (e)=>{ e.stopPropagation(); volDragging = true; volFromX(e.clientX); });
+  window.addEventListener('mousemove', (e)=>{ if(volDragging){ volFromX(e.clientX); showControls(); } });
+  window.addEventListener('mouseup', ()=> volDragging = false);
+  videoEl.addEventListener('volumechange', updateVolUI);
 
   seek.addEventListener('click', (e)=>{
     e.stopPropagation();
@@ -1135,6 +1301,131 @@
     }catch(e){}
   }
   // wipeCollection();
+
+  /* ══════════════════════════════════════════════════════════
+     ▼▼▼ Gemini API 키 ▼▼▼
+     https://aistudio.google.com/apikey 에서 무료로 발급받아
+     아래 큰따옴표 안에 붙여넣으세요.
+     ══════════════════════════════════════════════════════════ */
+  const GEMINI_API_KEY = "AQ.Ab8RN6IMHsldOrRKfVGTUBycicIjF-ZklZQY3CY8ApFNZhtsNw";
+  const GEMINI_MODEL = "gemini-2.5-flash";
+  /* ▲▲▲ Gemini 키 끝 ▲▲▲ */
+
+  const geminiScreen = $('gemini-screen');
+  const gemLog = $('gemini-log'), gemInput = $('gemini-input'), gemSend = $('gemini-send');
+  const gemEmpty = $('gemini-empty');
+  const GEM_KEY = 'secret_puzzle_gemini_chat';
+  let gemHistory = [];   // [{role:'user'|'model', text:''}]
+  let gemBusy = false;
+
+  function gemLoad(){
+    try{ const r = localStorage.getItem(GEM_KEY); gemHistory = r ? JSON.parse(r) : []; }
+    catch(e){ gemHistory = []; }
+    if(!Array.isArray(gemHistory)) gemHistory = [];
+  }
+  function gemSave(){
+    try{ localStorage.setItem(GEM_KEY, JSON.stringify(gemHistory)); }catch(e){}
+  }
+  function gemRender(){
+    gemLog.querySelectorAll('.msg').forEach(n => n.remove());
+    if(gemHistory.length === 0){ gemEmpty.style.display = 'block'; return; }
+    gemEmpty.style.display = 'none';
+    gemHistory.forEach(m => gemAddBubble(m.role === 'user' ? 'user' : 'ai', m.text));
+    gemLog.scrollTop = gemLog.scrollHeight;
+  }
+  function gemAddBubble(kind, text, extra){
+    const d = document.createElement('div');
+    d.className = 'msg ' + (kind === 'user' ? 'user' : 'ai') + (extra ? ' ' + extra : '');
+    d.textContent = text;
+    gemLog.appendChild(d);
+    gemLog.scrollTop = gemLog.scrollHeight;
+    return d;
+  }
+  function openGemini(){
+    showOnly(geminiScreen);   // 다른 화면 다 숨김
+    geminiScreen.classList.add('show');
+    setAppRatio(1);
+    gemLoad(); gemRender();
+    setTimeout(()=> gemInput.focus(), 50);
+  }
+  function closeGemini(){
+    geminiScreen.classList.remove('show');
+    goMain();
+  }
+
+  async function gemSendMessage(){
+    const text = gemInput.value.trim();
+    if(!text || gemBusy) return;
+
+    if(GEMINI_API_KEY === "여기에_API_키_붙여넣기" || !GEMINI_API_KEY){
+      gemEmpty.style.display = 'none';
+      gemAddBubble('user', text);
+      gemAddBubble('ai', 'API 키가 아직 설정되지 않았어요.\n코드의 GEMINI_API_KEY 자리에 키를 넣어주세요.', 'error');
+      gemInput.value = ''; gemInput.style.height = 'auto';
+      return;
+    }
+
+    gemEmpty.style.display = 'none';
+    gemInput.value = ''; gemInput.style.height = 'auto';
+    gemBusy = true; gemSend.disabled = true;
+
+    gemAddBubble('user', text);
+    gemHistory.push({ role:'user', text }); gemSave();
+
+    const thinking = gemAddBubble('ai', '생각 중…', 'thinking');
+
+    // 대화 맥락 전체를 Gemini 형식으로 변환
+    const contents = gemHistory.map(m => ({
+      role: m.role === 'user' ? 'user' : 'model',
+      parts: [{ text: m.text }]
+    }));
+
+    try{
+      const url = 'https://generativelanguage.googleapis.com/v1beta/models/'
+                + GEMINI_MODEL + ':generateContent';
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json', 'x-goog-api-key': GEMINI_API_KEY },
+        body: JSON.stringify({ contents })
+      });
+      const data = await res.json();
+      thinking.remove();
+
+      if(!res.ok){
+        const msg = (data && data.error && data.error.message) ? data.error.message : ('오류 ' + res.status);
+        gemAddBubble('ai', '⚠️ ' + msg, 'error');
+        gemBusy = false; gemSend.disabled = false; return;
+      }
+      const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || '(응답이 비어 있어요)';
+      gemAddBubble('ai', reply);
+      gemHistory.push({ role:'model', text: reply }); gemSave();
+    }catch(err){
+      thinking.remove();
+      gemAddBubble('ai', '⚠️ 연결 실패: ' + err.message + '\n인터넷 연결을 확인하거나, 파일을 직접 열지 말고 웹사이트에서 열어보세요.', 'error');
+    }
+    gemBusy = false; gemSend.disabled = false;
+    gemInput.focus();
+  }
+
+  // 입력창 자동 높이
+  gemInput.addEventListener('input', ()=>{
+    gemInput.style.height = 'auto';
+    gemInput.style.height = Math.min(120, gemInput.scrollHeight) + 'px';
+  });
+  // Enter=전송, Shift+Enter=줄바꿈
+  gemInput.addEventListener('keydown', (e)=>{
+    e.stopPropagation();
+    if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); gemSendMessage(); }
+  });
+  gemSend.addEventListener('click', gemSendMessage);
+  $('gemini-btn').addEventListener('click', openGemini);
+  $('gemini-close').addEventListener('click', closeGemini);
+  $('home-btn').addEventListener('click', goMain);
+  $('gemini-clear').addEventListener('click', ()=>{
+    if(confirm('대화 기록을 모두 지울까요?')){
+      gemHistory = []; gemSave(); gemRender();
+    }
+  });
 
   layoutApp();
   goMain();
