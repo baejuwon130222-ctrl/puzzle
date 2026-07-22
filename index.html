@@ -891,33 +891,51 @@
     openModal({
       title: '사진을 보시겠습니까?',
       options: [
-        { label: '사진 보기', onClick: startNewPuzzleFlow }
+        { label: '사진 보기', onClick: askPuzzleSource }
       ],
       onCancel: goMain
     });
   }
 
-  // 새 퍼즐 풀기: 아직 안 모은 사진 중 랜덤 → 조각 수 선택 → 퍼즐 시작
-  function startNewPuzzleFlow(){
-    const owned = loadCollection();
-    const candidates = [];
-    PHOTOS.forEach((u, i)=>{
-      if(typeof u === 'string' && u.trim().length > 2 && !owned.includes(i)) candidates.push(i);
-    });
-
+  // 퍼즐 종류 선택: 컬렉션 퍼즐(이미 모은 것) / 새로운 퍼즐(아직 안 모은 것)
+  function askPuzzleSource(){
     if(PHOTOS.length === 0){
       alert('코드의 PHOTOS 목록에 사진을 먼저 넣어주세요.');
       goMain(); return;
     }
+    openModal({
+      title: '어떤 퍼즐을 할까요?',
+      options: [
+        { label: '컬렉션 퍼즐', onClick: ()=> startPuzzleFlow('owned') },
+        { label: '새로운 퍼즐',  onClick: ()=> startPuzzleFlow('new') }
+      ],
+      onCancel: goMain
+    });
+  }
+
+  // mode: 'new' = 컬렉션에 없는 것 중 랜덤 / 'owned' = 컬렉션에 있는 것 중 랜덤
+  function startPuzzleFlow(mode){
+    const owned = loadCollection();
+    const candidates = [];
+    PHOTOS.forEach((u, i)=>{
+      if(typeof u !== 'string' || u.trim().length <= 2) return;
+      const has = owned.includes(i);
+      if(mode === 'owned' ? has : !has) candidates.push(i);
+    });
+
     if(candidates.length === 0){
-      alert('사진을 모두 모았습니다.\n컬렉션에서 사진을 골라 다시 풀 수 있어요.');
-      openCollection(); return;
+      if(mode === 'owned'){
+        alert('컬렉션에 아직 모은 사진이 없어요.\n먼저 새로운 퍼즐을 풀어보세요.');
+      } else {
+        alert('사진을 모두 모았습니다.\n컬렉션 퍼즐로 다시 풀 수 있어요.');
+      }
+      askPuzzleSource(); return;
     }
 
     const i = candidates[Math.floor(Math.random() * candidates.length)];
     askPieceCount(
       (n)=> startPuzzle(PHOTOS[i], i, n),
-      goMain
+      askPuzzleSource      // 조각 수에서 취소하면 종류 선택으로 되돌아감
     );
   }
 
