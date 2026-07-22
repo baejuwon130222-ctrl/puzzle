@@ -641,7 +641,49 @@
     "photos/1.png",
     "photos/2.png",
     "photos/3.png",
-    "photos/4.png"
+    "photos/4.png",
+    "photos/5.png",
+    "photos/6.png",
+    "photos/7.png",
+    "photos/8.png",
+    "photos/9.png",
+    "photos/10.png",
+    "photos/11.png",
+    "photos/12.png",
+    "photos/13.png",
+    "photos/14.png",
+    "photos/15.png",
+    "photos/16.png",
+    "photos/17.png",
+    "photos/18.png",
+    "photos/19.png",
+    "photos/20.png",
+    "photos/21.png",
+    "photos/22.png",
+    "photos/23.png",
+    "photos/24.png",
+    "photos/25.png",
+    "photos/26.png",
+    "photos/27.png",
+    "photos/28.png",
+    "photos/29.png",
+    "photos/30.png",
+    "photos/31.png",
+    "photos/32.png",
+    "photos/33.png",
+    "photos/34.png",
+    "photos/35.png",
+    "photos/36.png",
+    "photos/37.png",
+    "photos/38.png",
+    "photos/39.png",
+    "photos/40.png",
+    "photos/41.png",
+    "photos/42.png",
+    "photos/43.png",
+    "photos/44.png",
+    "photos/45.png",
+    "photos/46.png"
   ];
   /* ▲▲▲ 사진 끝 ▲▲▲ */
 
@@ -656,7 +698,10 @@
     "videos/2.mp4",
     "videos/3.mp4",
     "videos/4.mp4",
-    "videos/5.mp4"
+    "videos/5.mp4",
+    "videos/6.mp4",
+    "videos/7.mp4",
+    "videos/8.mp4"
   ];
   /* ▲▲▲ 영상 끝 ▲▲▲ */
 
@@ -1363,7 +1408,7 @@
      https://aistudio.google.com/apikey 에서 무료로 발급받아
      아래 큰따옴표 안에 붙여넣으세요.
      ══════════════════════════════════════════════════════════ */
-  const GEMINI_API_KEY = "AQ.Ab8RN6KaDJfthOY29Cin6oufc40oCTllkNmbjd4sH8zvPsVSAQ";
+  const GEMINI_API_KEY = "AQ.Ab8RN6KaDJfthOY29Cin6oufc40oCTIlkNmbjd4sH8zvPsVSAQ";
   const GEMINI_TEXT_MODEL  = "gemini-flash-latest";     // 대화용(항상 최신 Flash)
   const GEMINI_IMAGE_MODEL = "gemini-2.5-flash-image";  // 이미지 생성용(무료 Nano Banana)
   /* ▲▲▲ Gemini 키 끝 ▲▲▲ */
@@ -1471,7 +1516,7 @@
     const text = gemInput.value.trim();
     if((!text && !attached) || gemBusy) return;
 
-    if(GEMINI_API_KEY === "AQ.Ab8RN6IMHsldOrRKfVGTUBycicIjF-ZklZQY3CY8ApFNZhtsNw" || !GEMINI_API_KEY){
+    if(GEMINI_API_KEY === "여기에_API_키_붙여넣기" || !GEMINI_API_KEY){
       gemEmpty.style.display = 'none';
       gemAddBubble('user', text || '(파일)');
       gemAddBubble('ai', 'API 키가 아직 설정되지 않았어요.\n코드의 GEMINI_API_KEY 자리에 키를 넣어주세요.', 'error');
