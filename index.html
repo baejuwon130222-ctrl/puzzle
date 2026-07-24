@@ -112,17 +112,25 @@
     border-color:var(--fg);
   }
 
-  #main-nav{
-    position:absolute; top:var(--pad); right:var(--pad);
-    display:flex; gap:var(--gap);
+  /* 상·하단 바: 버튼이 겹치지 않도록 자동 줄바꿈 */
+  #top-bar, #bottom-bar{
+    position:absolute; left:var(--pad); right:var(--pad);
+    display:flex; justify-content:space-between; align-items:flex-start;
+    gap:var(--gap); flex-wrap:wrap; z-index:3;
+    pointer-events:none;
   }
-  #main-nav-left{
-    position:absolute; top:var(--pad); left:var(--pad);
-    display:flex; gap:var(--gap); z-index:2;
+  #top-bar{ top:var(--pad); }
+  #bottom-bar{ bottom:var(--pad); align-items:flex-end; }
+  .nav-group{
+    display:flex; gap:var(--gap); flex-wrap:wrap; align-items:center;
+    pointer-events:auto;
   }
+  #bottom-bar .nav-group{ justify-content:flex-end; }
+  #admin-badge{ color:#4b8bff; letter-spacing:.1em; }
+
   #hint-line{
-    position:absolute; left:0; right:0; bottom:var(--pad);
-    text-align:center;
+    position:absolute; left:0; right:0; bottom:calc(var(--pad) + 46px);
+    text-align:center; pointer-events:none;
   }
 
   /* ══════════ Gemini 채팅 화면 (다크) ══════════ */
@@ -268,6 +276,13 @@
     cursor:pointer; padding:4px;
   }
   .modal-cancel:hover{ color:var(--fg); }
+  .modal-input{
+    width:100%; background:#1a1a1f; color:#fff;
+    border:1px solid rgba(255,255,255,.2); border-radius:8px;
+    padding:10px 12px; font:inherit; font-size:16px;
+    outline:none; text-align:center; letter-spacing:.05em;
+  }
+  .modal-input:focus{ border-color:#4b8bff; }
 
   /* ══════════ 퍼즐 화면 ══════════ */
   #puzzle-screen{
@@ -299,11 +314,11 @@
   .piece:active{ cursor:grabbing; }
   .piece.drag-over{ outline:1px solid var(--fg); outline-offset:-1px; }
   /* 터치로 고른 조각 표시 */
-  .piece{ touch-action:manipulation; -webkit-tap-highlight-color:transparent; }
-  .piece.selected{
-    outline:3px solid #4b8bff; outline-offset:-3px;
-    filter:brightness(1.25);
+  .piece{ touch-action:none; -webkit-tap-highlight-color:transparent; }
+  .piece.dragging{
+    opacity:.55; outline:2px solid #4b8bff; outline-offset:-2px;
   }
+  .piece.drag-over{ outline:3px solid #4b8bff; outline-offset:-3px; filter:brightness(1.2); }
   #crack-overlay{
     position:absolute; inset:6px;
     pointer-events:none;
@@ -486,8 +501,11 @@
   @media (pointer: coarse), (max-width: 600px){
     :root{ --btn:44px; --pad:12px; --gap:6px; }
     .btn-text{ font-size:12px; padding:0 10px; }
-    #main-nav, #main-nav-left{ gap:6px; }
-    #main-nav-left{ flex-wrap:wrap; }
+    #top-bar, #bottom-bar{ gap:5px; }
+    .nav-group{ gap:5px; }
+    .btn-text{ font-size:11px; padding:0 8px; height:34px; }
+    /* 방향키가 버튼과 겹치지 않게 위아래 여유 */
+    #keys{ padding:0 8%; }
     .key{ width:26%; }
     .grid{ grid-template-columns:repeat(3,1fr); gap:6px; }
     .modal-box{ width:min(320px, 88%); }
@@ -537,16 +555,28 @@
       </div>
     </div>
 
-    <div id="main-nav-left">
-      <button class="btn-text" id="home-btn">메인화면</button>
-      <button class="btn-text" id="gemini-btn">Gemini</button>
-      <button class="btn-text" id="gemini-custom-btn">Gemini 커스텀</button>
+    <div id="top-bar">
+      <div class="nav-group">
+        <button class="btn-text" id="home-btn">메인화면</button>
+        <button class="btn-text" id="gemini-btn">Gemini</button>
+        <button class="btn-text" id="gemini-custom-btn">Gemini 커스텀</button>
+      </div>
+      <div class="nav-group">
+        <button class="btn-text" id="collection-btn">사진</button>
+        <button class="btn-text" id="video-collection-btn">영상</button>
+        <button class="btn-text" id="custom-collection-btn">커스텀</button>
+      </div>
     </div>
 
-    <div id="main-nav">
-      <button class="btn-text" id="collection-btn">사진</button>
-      <button class="btn-text" id="video-collection-btn">영상</button>
-      <button class="btn-text" id="custom-collection-btn">커스텀</button>
+    <div id="bottom-bar">
+      <div class="nav-group">
+        <button class="btn-text" id="exit-admin-btn" style="display:none">기본화면으로 돌아가기</button>
+      </div>
+      <div class="nav-group">
+        <span id="admin-badge" class="label" style="display:none">관리자 모드</span>
+        <button class="btn-text" id="fullscreen-btn">전체화면</button>
+        <button class="btn-text" id="admin-btn">관리자</button>
+      </div>
     </div>
 
     <div id="hint-line" class="label">방향키 또는 화살표를 눌러보세요</div>
@@ -570,7 +600,7 @@
     <button class="btn" id="puzzle-exit" title="나가기">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
     </button>
-    <div id="puzzle-hint" class="label">조각을 눌러서 서로 자리를 바꾸세요</div>
+    <div id="puzzle-hint" class="label">조각을 끌어다 놓아 자리를 바꾸세요</div>
   </div>
 
   <!-- ── 완성 사진 ── -->
@@ -790,11 +820,35 @@
   function openModal(cfg){
     modalTitle.textContent = cfg.title || '';
     modalBtns.innerHTML = '';
+
+    // 비밀번호 입력이 필요한 모달
+    let pwInput = null;
+    if(cfg.password){
+      pwInput = document.createElement('input');
+      pwInput.type = 'password';
+      pwInput.className = 'modal-input';
+      pwInput.placeholder = cfg.placeholder || '비밀번호';
+      pwInput.addEventListener('keydown', (e)=>{
+        e.stopPropagation();
+        if(e.key === 'Enter'){ e.preventDefault(); submit(); }
+      });
+      modalBtns.appendChild(pwInput);
+      setTimeout(()=> pwInput.focus(), 60);
+    }
+    function submit(){
+      const v = pwInput ? pwInput.value : '';
+      closeModal();
+      cfg.onSubmit && cfg.onSubmit(v);
+    }
+
     (cfg.options || []).forEach(opt=>{
       const b = document.createElement('button');
       b.className = 'btn-text';
       b.textContent = opt.label;
-      b.addEventListener('click', ()=>{ closeModal(); opt.onClick && opt.onClick(); });
+      b.addEventListener('click', ()=>{
+        if(opt.submit){ submit(); return; }
+        closeModal(); opt.onClick && opt.onClick();
+      });
       modalBtns.appendChild(b);
     });
     modalCancel.onclick = ()=>{ closeModal(); cfg.onCancel && cfg.onCancel(); };
@@ -885,10 +939,50 @@
     codeModal.classList.remove('show');
     const gs = document.getElementById('gemini-screen');
     if(gs) gs.classList.remove('show');
+    const ps = document.getElementById('picker-screen');
+    if(ps) ps.classList.remove('show');
     showOnly(mainScreen);
     setAppRatio(1);
     mainScreen.focus();
   }
+
+  /* ══════════ 관리자 모드 ══════════
+     기본 메인화면 ↔ 관리자 메인화면
+     관리자 모드에서는 퍼즐을 풀지 않아도 모든 사진이 컬렉션에 열려 있고,
+     사진·영상·퍼즐을 보고 나와도 관리자 메인화면으로 돌아옵니다. */
+  const ADMIN_PW = 'pw.bjwon';
+  let adminMode = false;
+
+  function applyAdminUI(){
+    $('admin-btn').style.display        = adminMode ? 'none' : '';
+    $('exit-admin-btn').style.display   = adminMode ? '' : 'none';
+    $('admin-badge').style.display      = adminMode ? '' : 'none';
+    $('hint-line').textContent = adminMode
+      ? '관리자 모드 · 사진과 영상을 모두 볼 수 있어요'
+      : '방향키 또는 화살표를 눌러보세요';
+  }
+  function enterAdmin(){ adminMode = true;  applyAdminUI(); goMain(); }
+  function exitAdmin(){  adminMode = false; applyAdminUI(); goMain(); }
+
+  $('admin-btn').addEventListener('click', ()=>{
+    openModal({
+      title: '관리자 비밀번호',
+      password: true,
+      placeholder: '비밀번호 입력',
+      options: [{ label: '확인', submit: true }],
+      onSubmit: (v)=>{
+        if(v === ADMIN_PW) enterAdmin();
+        else alert('비밀번호가 올바르지 않습니다.');
+      }
+    });
+  });
+  $('exit-admin-btn').addEventListener('click', exitAdmin);
+
+  /* ── 전체화면 버튼 (F11처럼 · 모바일 포함) ── */
+  $('fullscreen-btn').addEventListener('click', ()=>{
+    if(isFullscreen()) exitFullscreen();
+    else enterFullscreen();
+  });
 
   /* ---------- 암호 시퀀스 ---------- */
   const CODE = ['Left','Left','Right','Right','Left','Right','Right','Right'];
@@ -1027,10 +1121,10 @@
   }
 
   /* ---------- 퍼즐 ---------- */
-  let selectedPiece = null;   // 터치/클릭으로 고른 조각
+  let dragPiece = null, dragMoved = false;   // 끌고 있는 조각
   function startPuzzle(url, imgIndex, pieceN){
     N = pieceN || 3;
-    selectedPiece = null;
+    dragPiece = null; dragMoved = false;
     showOnly(puzzleScreen);
     puzzleGrid.style.setProperty('--n', N);
     puzzleGrid.innerHTML = '';
@@ -1060,23 +1154,41 @@
         checkSolved(url, imgIndex);
       });
 
-      // ── 모바일(터치) + 마우스 공용: 탭해서 고르고, 다른 조각 탭하면 자리 바꿈 ──
-      d.addEventListener('pointerup', (e)=>{
+      // ── 눌러서 끌어다 놓기 (모바일 터치 + 마우스 공용) ──
+      d.addEventListener('pointerdown', (e)=>{
         e.preventDefault();
-        if(!selectedPiece){
-          selectedPiece = d;
-          d.classList.add('selected');
-          return;
+        dragPiece = d;
+        dragMoved = false;
+        d.classList.add('dragging');
+        try{ d.setPointerCapture(e.pointerId); }catch(err){}
+      });
+      d.addEventListener('pointermove', (e)=>{
+        if(!dragPiece) return;
+        dragMoved = true;
+        // 손가락/마우스 아래에 있는 조각을 찾아 표시
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        const over = el && el.classList && el.classList.contains('piece') ? el : null;
+        puzzleGrid.querySelectorAll('.piece').forEach(p => p.classList.remove('drag-over'));
+        if(over && over !== dragPiece) over.classList.add('drag-over');
+      });
+      const finishDrag = (e)=>{
+        if(!dragPiece) return;
+        const from = dragPiece;
+        from.classList.remove('dragging');
+        puzzleGrid.querySelectorAll('.piece').forEach(p => p.classList.remove('drag-over'));
+        dragPiece = null;
+        if(!dragMoved) return;                    // 그냥 탭한 경우는 무시
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        const target = el && el.classList && el.classList.contains('piece') ? el : null;
+        if(target && target !== from){
+          swap(from, target);
+          checkSolved(url, imgIndex);
         }
-        if(selectedPiece === d){          // 같은 걸 다시 누르면 선택 해제
-          d.classList.remove('selected');
-          selectedPiece = null;
-          return;
-        }
-        selectedPiece.classList.remove('selected');
-        swap(selectedPiece, d);
-        selectedPiece = null;
-        checkSolved(url, imgIndex);
+      };
+      d.addEventListener('pointerup', finishDrag);
+      d.addEventListener('pointercancel', ()=>{
+        if(dragPiece){ dragPiece.classList.remove('dragging'); dragPiece = null; }
+        puzzleGrid.querySelectorAll('.piece').forEach(p => p.classList.remove('drag-over'));
       });
       puzzleGrid.appendChild(d);
     });
@@ -1243,6 +1355,11 @@
       return Array.isArray(a) ? a : [];
     }catch(e){ return []; }
   }
+  // 컬렉션 '보기'용 목록 — 관리자 모드면 전체 사진이 열려 있음
+  function viewCollection(){
+    if(adminMode) return PHOTOS.map((_, i) => i);
+    return loadCollection();
+  }
   function saveToCollection(i){
     try{
       const list = loadCollection();
@@ -1258,7 +1375,7 @@
     showOnly(collectionScreen);
     collectionGrid.innerHTML = '';
 
-    const list = loadCollection().filter(i => PHOTOS[i]);
+    const list = viewCollection().filter(i => PHOTOS[i]);
     if(!list.length){
       collectionGrid.innerHTML = '<div class="empty">아직 맞춘 퍼즐이 없습니다</div>';
       return;
@@ -1372,7 +1489,7 @@
   function seekBy(s){
     if(!isFinite(videoEl.duration)) return;
     videoEl.currentTime = Math.min(videoEl.duration, Math.max(0, videoEl.currentTime + s));
-    showControls();
+    // 바는 일부러 띄우지 않음 (거슬리지 않게)
   }
   function stopVideo(){
     try{ videoEl.pause(); videoEl.removeAttribute('src'); videoEl.load(); }catch(e){}
@@ -1468,10 +1585,38 @@
   function updateTime(){ timeLabel.textContent = fmt(videoEl.currentTime) + ' / ' + fmt(videoEl.duration); }
 
   // 마우스가 영상 화면 안에서 움직이면 컨트롤 등장
-  videoScreen.addEventListener('mousemove', showControls);
-  videoScreen.addEventListener('touchstart', showControls, { passive:true });
-  videoScreen.addEventListener('pointerdown', showControls);
-  videoScreen.addEventListener('pointermove', showControls);
+  /* 영상 그림이 실제로 그려지는 사각형 (검은 여백 제외) 계산 */
+  function videoRect(){
+    const r = videoEl.getBoundingClientRect();
+    const vw = videoEl.videoWidth, vh = videoEl.videoHeight;
+    if(!vw || !vh) return r;
+    const scaleFit = Math.min(r.width / vw, r.height / vh);
+    const w = vw * scaleFit, h = vh * scaleFit;
+    return {
+      left: r.left + (r.width - w)/2,
+      top:  r.top  + (r.height - h)/2,
+      right:r.left + (r.width + w)/2,
+      bottom:r.top + (r.height + h)/2
+    };
+  }
+  function insideVideo(x, y){
+    const b = videoRect();
+    return x >= b.left && x <= b.right && y >= b.top && y <= b.bottom;
+  }
+  // 컨트롤(바·버튼) 위에 있으면 계속 보이게
+  function overControls(x, y){
+    const el = document.elementFromPoint(x, y);
+    return !!(el && el.closest && el.closest('#video-ui, #v-close, #v-full, #next-ask'));
+  }
+  function maybeShowControls(e){
+    if(insideVideo(e.clientX, e.clientY) || overControls(e.clientX, e.clientY)) showControls();
+  }
+  videoScreen.addEventListener('mousemove', maybeShowControls);
+  videoScreen.addEventListener('pointermove', maybeShowControls);
+  videoScreen.addEventListener('pointerdown', maybeShowControls);
+  videoScreen.addEventListener('touchstart', (e)=>{
+    if(e.touches && e.touches[0]) maybeShowControls(e.touches[0]);
+  }, { passive:true });
 
   // 버튼들
   $('v-play').addEventListener('click', (e)=>{ e.stopPropagation(); togglePlay(); });
@@ -1707,7 +1852,7 @@
 
   /* ── 컬렉션(퍼즐로 모은 사진)에서 고르기 ── */
   function openPhotoPicker(){
-    const owned = loadCollection().filter(i => PHOTOS[i]);
+    const owned = viewCollection().filter(i => PHOTOS[i]);
     if(!owned.length){
       alert('아직 퍼즐로 모은 사진이 없어요.\n먼저 퍼즐을 풀어 컬렉션을 채워주세요.');
       return;
@@ -1933,6 +2078,7 @@
 
   // wipeCollection();
 
+  applyAdminUI();
   layoutApp();
   goMain();
 })();
