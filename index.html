@@ -506,6 +506,17 @@
     .card .badge{ background:rgba(0,0,0,.25); }
   }
 
+  /* ══════════ 컬렉션에서 사진 고르기 ══════════ */
+  #picker-screen{
+    position:absolute; inset:0; display:none; z-index:22;
+    background:#0d0d0f;
+    flex-direction:column; padding:var(--pad);
+  }
+  #picker-screen.show{ display:flex; }
+  #picker-screen .grid img{ border:1px solid rgba(255,255,255,.15); }
+  #picker-screen .grid img:active{ opacity:.5; }
+  #picker-hint{ text-align:center; padding-top:10px; }
+
   @media (prefers-reduced-motion: reduce){
     *{ transition:none !important; }
   }
@@ -658,6 +669,15 @@
       </button>
     </div>
     <div class="grid" id="custom-grid"></div>
+  </div>
+  <!-- ── 컬렉션에서 사진 고르기 ── -->
+  <div id="picker-screen">
+    <div class="sheet-head">
+      <span class="label">컬렉션에서 고르기 (여러 장 가능)</span>
+      <button class="btn" id="picker-close" title="완료">✓</button>
+    </div>
+    <div class="grid" id="picker-grid"></div>
+    <div id="picker-hint" class="label">사진을 눌러 첨부하세요 · 다 고르면 ✓</div>
   </div>
 
 </div>
@@ -897,7 +917,11 @@
       return;
     }
     if(document.getElementById('gemini-screen').classList.contains('show')){
-      if(e.key === 'Escape') closeGemini();
+      if(e.key === 'Escape'){
+        if(pickerScreen.classList.contains('show')) pickerScreen.classList.remove('show');
+        else if(codeModal.classList.contains('show')) closeModal();
+        else closeGemini();
+      }
       return;
     }
     if(!onMain()){
@@ -1575,10 +1599,12 @@
   const gemLog = $('gemini-log'), gemInput = $('gemini-input'), gemSend = $('gemini-send');
   const gemEmpty = $('gemini-empty'), gemTitle = $('gemini-title');
   const gemAttachBtn = $('gemini-attach'), gemFile = $('gemini-file'), gemAttachPrev = $('gemini-attach-preview');
+  const pickerScreen = $('picker-screen'), pickerGrid = $('picker-grid');
+  $('picker-close').addEventListener('click', ()=> pickerScreen.classList.remove('show'));
 
   let gemMode = 'chat';   // 'chat' = 일반, 'custom' = 이미지 생성
   let gemBusy = false;
-  let attached = null;    // { dataUrl, mime, base64 }
+  let attached = [];      // [{ dataUrl, mime, base64 }] 여러 장 첨부 가능
 
   const KEYS = { chat:'secret_puzzle_gemini_chat', custom:'secret_puzzle_gemini_custom' };
   let histories = { chat:[], custom:[] };   // 각 모드별 [{role, text, img?}]
@@ -1636,6 +1662,7 @@
       ? '설명을 입력하면 이미지를 만들어드려요.<br>파일을 첨부해 참고하게 할 수도 있어요.'
       : '무엇이든 물어보세요.<br>대화는 이 브라우저에 저장됩니다.';
     clearAttach();
+    pickerScreen.classList.remove('show');
     showOnly(geminiScreen); geminiScreen.classList.add('show');
     setAppRatio(1);
     gemLoad(mode); gemRender();
@@ -1643,28 +1670,80 @@
   }
   function closeGemini(){ geminiScreen.classList.remove('show'); goMain(); }
 
-  // ── 파일 첨부 ──
-  function clearAttach(){ attached = null; gemAttachPrev.innerHTML = ''; }
-  gemAttachBtn.addEventListener('click', ()=> gemFile.click());
+  // ── 파일 첨부 (여러 장 가능) ──
+  function clearAttach(){ attached = []; renderAttach(); }
+  function renderAttach(){
+    gemAttachPrev.innerHTML = '';
+    attached.forEach((a, idx)=>{
+      const t = document.createElement('div'); t.className = 'thumb';
+      t.innerHTML = '<img src="'+a.dataUrl+'"><div class="x">✕</div>';
+      t.querySelector('.x').addEventListener('click', ()=>{ attached.splice(idx,1); renderAttach(); });
+      gemAttachPrev.appendChild(t);
+    });
+  }
+
+  // ＋ 버튼 → 내 파일 / 컬렉션에서 고르기
+  gemAttachBtn.addEventListener('click', ()=>{
+    openModal({
+      title: '무엇을 첨부할까요?',
+      options: [
+        { label: '내 파일에서 고르기', onClick: ()=> gemFile.click() },
+        { label: '컬렉션에서 고르기',  onClick: openPhotoPicker }
+      ]
+    });
+  });
+
   gemFile.addEventListener('change', ()=>{
     const f = gemFile.files[0]; gemFile.value = '';
     if(!f) return;
     const reader = new FileReader();
     reader.onload = ()=>{
       const dataUrl = reader.result;
-      attached = { dataUrl, mime: f.type, base64: dataUrl.split(',')[1] };
-      gemAttachPrev.innerHTML = '';
-      const t = document.createElement('div'); t.className = 'thumb';
-      t.innerHTML = '<img src="'+dataUrl+'"><div class="x">✕</div>';
-      t.querySelector('.x').addEventListener('click', clearAttach);
-      gemAttachPrev.appendChild(t);
+      attached.push({ dataUrl, mime: f.type, base64: dataUrl.split(',')[1] });
+      renderAttach();
     };
     reader.readAsDataURL(f);
   });
 
+  /* ── 컬렉션(퍼즐로 모은 사진)에서 고르기 ── */
+  function openPhotoPicker(){
+    const owned = loadCollection().filter(i => PHOTOS[i]);
+    if(!owned.length){
+      alert('아직 퍼즐로 모은 사진이 없어요.\n먼저 퍼즐을 풀어 컬렉션을 채워주세요.');
+      return;
+    }
+    pickerGrid.innerHTML = '';
+    owned.forEach(i=>{
+      const img = document.createElement('img');
+      img.src = PHOTOS[i]; img.draggable = false;
+      img.addEventListener('click', async ()=>{
+        img.style.opacity = '.4';
+        try{
+          const a = await urlToAttach(PHOTOS[i]);
+          attached.push(a); renderAttach();
+        }catch(e){ alert('사진을 불러오지 못했어요.'); }
+        img.style.opacity = '1';
+      });
+      pickerGrid.appendChild(img);
+    });
+    pickerScreen.classList.add('show');
+  }
+  // 사진 파일 → base64 변환 (AI에 보내려면 필요)
+  async function urlToAttach(url){
+    const res = await fetch(url);
+    const blob = await res.blob();
+    const dataUrl = await new Promise((ok, no)=>{
+      const r = new FileReader();
+      r.onload = ()=> ok(r.result);
+      r.onerror = no;
+      r.readAsDataURL(blob);
+    });
+    return { dataUrl, mime: blob.type || 'image/png', base64: dataUrl.split(',')[1] };
+  }
+
   async function gemSendMessage(){
     const text = gemInput.value.trim();
-    if((!text && !attached) || gemBusy) return;
+    if((!text && attached.length === 0) || gemBusy) return;
 
     if(GEMINI_API_KEY === "여기에_API_키_붙여넣기" || !GEMINI_API_KEY){
       gemEmpty.style.display = 'none';
@@ -1675,22 +1754,22 @@
     }
 
     gemEmpty.style.display = 'none';
-    const userImg = attached ? attached.dataUrl : null;
-    const sendAttach = attached;
+    const sendAttach = attached.slice();               // 이번에 보낼 사진들
+    const userImg = sendAttach.length ? sendAttach[0].dataUrl : null;
     gemInput.value = ''; gemInput.style.height = 'auto'; clearAttach();
     gemBusy = true; gemSend.disabled = true;
 
     // 사용자 말풍선
-    gemAddBubble('user', text, null, userImg);
+    gemAddBubble('user', text + (sendAttach.length > 1 ? `  (사진 ${sendAttach.length}장)` : ''), null, userImg);
     const h = curHist();
     h.push({ role:'user', text, img:userImg }); gemSave();
 
     const thinking = gemAddBubble('ai', gemMode === 'custom' ? '이미지 만드는 중…' : '생각 중…', 'thinking');
 
-    // 요청 parts 구성 (텍스트 + 첨부 이미지)
+    // 요청 parts 구성 (텍스트 + 첨부 이미지 전부)
     const parts = [];
     if(text) parts.push({ text });
-    if(sendAttach) parts.push({ inline_data: { mime_type: sendAttach.mime, data: sendAttach.base64 } });
+    sendAttach.forEach(a => parts.push({ inline_data: { mime_type: a.mime, data: a.base64 } }));
 
     const model = gemMode === 'custom' ? GEMINI_IMAGE_MODEL : GEMINI_TEXT_MODEL;
 
