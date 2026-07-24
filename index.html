@@ -2,6 +2,8 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
 <title>secret puzzle</title>
 <style>
   /* ══════════ 디자인 토큰 (여기만 고치면 전체 톤이 바뀝니다) ══════════ */
@@ -97,6 +99,8 @@
   }
   .key{
     width:20%; aspect-ratio:1/1;
+    cursor:pointer; touch-action:manipulation;
+    -webkit-tap-highlight-color:transparent;
     border:1px solid var(--line);
     background:transparent;
     display:flex; align-items:center; justify-content:center;
@@ -294,6 +298,12 @@
   }
   .piece:active{ cursor:grabbing; }
   .piece.drag-over{ outline:1px solid var(--fg); outline-offset:-1px; }
+  /* 터치로 고른 조각 표시 */
+  .piece{ touch-action:manipulation; -webkit-tap-highlight-color:transparent; }
+  .piece.selected{
+    outline:3px solid #4b8bff; outline-offset:-3px;
+    filter:brightness(1.25);
+  }
   #crack-overlay{
     position:absolute; inset:6px;
     pointer-events:none;
@@ -471,6 +481,31 @@
   #next-ask .ask-btns{ display:flex; gap:10px; }
   #next-ask .ask-btns .btn-text{ min-width:96px; justify-content:center; }
 
+
+  /* ══════════ 모바일 대응 ══════════ */
+  @media (pointer: coarse), (max-width: 600px){
+    :root{ --btn:44px; --pad:12px; --gap:6px; }
+    .btn-text{ font-size:12px; padding:0 10px; }
+    #main-nav, #main-nav-left{ gap:6px; }
+    #main-nav-left{ flex-wrap:wrap; }
+    .key{ width:26%; }
+    .grid{ grid-template-columns:repeat(3,1fr); gap:6px; }
+    .modal-box{ width:min(320px, 88%); }
+    .msg{ max-width:86%; font-size:14px; }
+    #gemini-input{ font-size:16px; }   /* 16px 미만이면 iOS가 자동 확대함 */
+    .barbtn{ font-size:22px; padding:6px; }
+    .barbtn.play{ font-size:26px; }
+    #video-ui{ gap:12px; }
+    #vol-track{ width:56px; }
+    /* 터치에서 컨트롤이 바로 사라지지 않도록 살짝 크게 */
+    #seek{ height:5px; }
+  }
+  /* 터치 기기: 호버로만 보이던 것들을 항상 보이게 */
+  @media (hover: none){
+    #close-x{ opacity:.75; }
+    .card .badge{ background:rgba(0,0,0,.25); }
+  }
+
   @media (prefers-reduced-motion: reduce){
     *{ transition:none !important; }
   }
@@ -503,7 +538,7 @@
       <button class="btn-text" id="custom-collection-btn">커스텀</button>
     </div>
 
-    <div id="hint-line" class="label">방향키를 눌러보세요</div>
+    <div id="hint-line" class="label">방향키 또는 화살표를 눌러보세요</div>
   </div>
 
   <!-- ── 선택 모달 (사진 보기 / 조각 수 / 사진 클릭 시 등 공용) ── -->
@@ -524,7 +559,7 @@
     <button class="btn" id="puzzle-exit" title="나가기">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
     </button>
-    <div id="puzzle-hint" class="label">조각을 드래그해서 맞추세요</div>
+    <div id="puzzle-hint" class="label">조각을 눌러서 서로 자리를 바꾸세요</div>
   </div>
 
   <!-- ── 완성 사진 ── -->
@@ -762,23 +797,30 @@
     });
   }
 
-  /* ---------- 화면 크기 (항상 브라우저 안에 들어오도록) ----------
-     가로가 긴 사진이든 세로가 긴 사진이든, 잘리거나 화면 밖으로
-     넘어가지 않게 가로·세로 최대치를 넘지 않는 크기를 직접 계산합니다. */
+  /* ---------- 화면 크기 ----------
+     기본(메뉴·퍼즐 등): 화면의 92% 크기, 정사각형
+     채움모드(사진·영상): 화면 100%를 쓰고, 매체의 원본 비율에 맞춰
+       - 세로가 더 길면 → 화면 세로 끝까지
+       - 가로가 더 길면 → 화면 가로 끝까지
+     여백 없이 최대 크기로 보이게 합니다. (모바일 세로모드 포함) */
   let appRatio = 1;                       // 가로 / 세로
-  function setAppRatio(r){
+  let fillMode = false;                   // true면 화면 꽉 채움
+  function setAppRatio(r, fill){
     appRatio = (isFinite(r) && r > 0) ? r : 1;
+    fillMode = !!fill;
     layoutApp();
   }
   function layoutApp(){
-    const maxW = window.innerWidth  * 0.92;
-    const maxH = window.innerHeight * 0.92;
+    const pad = fillMode ? 1 : 0.92;
+    const maxW = window.innerWidth  * pad;
+    const maxH = window.innerHeight * pad;
     let w = maxW, h = w / appRatio;
     if(h > maxH){ h = maxH; w = h * appRatio; }
     app.style.width  = Math.round(w) + 'px';
     app.style.height = Math.round(h) + 'px';
   }
   window.addEventListener('resize', layoutApp);
+  window.addEventListener('orientationchange', ()=> setTimeout(layoutApp, 250));
 
   /* ---------- 진짜 전체화면 (F11식) ----------
      브라우저 Fullscreen API. 사용자 동작(클릭·키)이 있어야 진입 가능. */
@@ -872,12 +914,7 @@
     if(e.key === 'ArrowRight') rightBtn.classList.add('pressed');
 
     if(e.key === 'ArrowLeft' || e.key === 'ArrowRight'){
-      buffer.push(e.key === 'ArrowLeft' ? 'Left' : 'Right');
-      if(buffer.length > CODE.length) buffer.shift();
-      if(buffer.length === CODE.length && buffer.every((v,i)=> v === CODE[i])){
-        buffer = [];
-        openCodeSuccessModal();
-      }
+      pushCode(e.key === 'ArrowLeft' ? 'Left' : 'Right');
     }
   });
   document.addEventListener('keyup', (e)=>{
@@ -885,6 +922,32 @@
     if(e.key === 'ArrowRight') rightBtn.classList.remove('pressed');
   });
   mainScreen.addEventListener('click', ()=> mainScreen.focus());
+
+  // 암호 입력 처리 (키보드 · 화면 터치 공용)
+  function pushCode(dir){
+    if(codeModal.classList.contains('show')) return;
+    buffer.push(dir);
+    if(buffer.length > CODE.length) buffer.shift();
+    if(buffer.length === CODE.length && buffer.every((v,i)=> v === CODE[i])){
+      buffer = [];
+      openCodeSuccessModal();
+    }
+  }
+
+  // ── 모바일: 화살표 버튼을 눌러서 암호 입력 ──
+  function tapArrow(btn, dir){
+    btn.addEventListener('pointerdown', (e)=>{
+      e.preventDefault();
+      btn.classList.add('pressed');
+      pushCode(dir);
+    });
+    const release = ()=> btn.classList.remove('pressed');
+    btn.addEventListener('pointerup', release);
+    btn.addEventListener('pointerleave', release);
+    btn.addEventListener('pointercancel', release);
+  }
+  tapArrow(leftBtn, 'Left');
+  tapArrow(rightBtn, 'Right');
 
   // 암호 성공 → "사진 보기 / 닫기" 선택창
   function openCodeSuccessModal(){
@@ -940,8 +1003,10 @@
   }
 
   /* ---------- 퍼즐 ---------- */
+  let selectedPiece = null;   // 터치/클릭으로 고른 조각
   function startPuzzle(url, imgIndex, pieceN){
     N = pieceN || 3;
+    selectedPiece = null;
     showOnly(puzzleScreen);
     puzzleGrid.style.setProperty('--n', N);
     puzzleGrid.innerHTML = '';
@@ -968,6 +1033,25 @@
         d.classList.remove('drag-over');
         const from = puzzleGrid.querySelector(`[data-slot="${e.dataTransfer.getData('text/plain')}"]`);
         swap(from, d);
+        checkSolved(url, imgIndex);
+      });
+
+      // ── 모바일(터치) + 마우스 공용: 탭해서 고르고, 다른 조각 탭하면 자리 바꿈 ──
+      d.addEventListener('pointerup', (e)=>{
+        e.preventDefault();
+        if(!selectedPiece){
+          selectedPiece = d;
+          d.classList.add('selected');
+          return;
+        }
+        if(selectedPiece === d){          // 같은 걸 다시 누르면 선택 해제
+          d.classList.remove('selected');
+          selectedPiece = null;
+          return;
+        }
+        selectedPiece.classList.remove('selected');
+        swap(selectedPiece, d);
+        selectedPiece = null;
         checkSolved(url, imgIndex);
       });
       puzzleGrid.appendChild(d);
@@ -1026,7 +1110,8 @@
     if(imgIndex >= 0 && !fromCollection) saveToCollection(imgIndex);
     const tmp = new Image();
     tmp.onload = ()=>{
-      setAppRatio(1);
+      // 사진 원본 비율로 화면을 꽉 채움(여백 최소) → 세로 사진은 세로 끝까지
+      setAppRatio(tmp.naturalWidth / tmp.naturalHeight, true);
       resetZoom();
       solvedImg.src = url;
       showOnly(solvedScreen);
@@ -1077,6 +1162,44 @@
     tx = Math.min(0, Math.max(r.width  - r.width  * scale, tx));
     ty = Math.min(0, Math.max(r.height - r.height * scale, ty));
   }
+
+  /* ── 모바일: 두 손가락으로 확대/축소, 확대 중엔 한 손가락으로 이동 ── */
+  let pinchDist = 0, pinchScale = 1, touchPan = false, tsx = 0, tsy = 0, ttx = 0, tty = 0;
+  function dist2(t){
+    const dx = t[0].clientX - t[1].clientX, dy = t[0].clientY - t[1].clientY;
+    return Math.hypot(dx, dy);
+  }
+  solvedScreen.addEventListener('touchstart', (e)=>{
+    if(e.touches.length === 2){
+      pinchDist = dist2(e.touches); pinchScale = scale; touchPan = false;
+    } else if(e.touches.length === 1 && scale > 1){
+      touchPan = true;
+      tsx = e.touches[0].clientX; tsy = e.touches[0].clientY; ttx = tx; tty = ty;
+    }
+  }, { passive:true });
+  solvedScreen.addEventListener('touchmove', (e)=>{
+    if(e.touches.length === 2){
+      e.preventDefault();
+      const r = solvedScreen.getBoundingClientRect();
+      const nd = dist2(e.touches);
+      if(pinchDist > 0){
+        const prev = scale;
+        scale = Math.min(5, Math.max(1, pinchScale * (nd / pinchDist)));
+        // 두 손가락 중간점 기준으로 확대
+        const mx = (e.touches[0].clientX + e.touches[1].clientX)/2 - r.left;
+        const my = (e.touches[0].clientY + e.touches[1].clientY)/2 - r.top;
+        tx = mx - ((mx - tx)/prev) * scale;
+        ty = my - ((my - ty)/prev) * scale;
+        clamp(r); applyT();
+      }
+    } else if(touchPan && e.touches.length === 1 && scale > 1){
+      e.preventDefault();
+      tx = ttx + (e.touches[0].clientX - tsx);
+      ty = tty + (e.touches[0].clientY - tsy);
+      clamp(solvedScreen.getBoundingClientRect()); applyT();
+    }
+  }, { passive:false });
+  solvedScreen.addEventListener('touchend', ()=>{ pinchDist = 0; touchPan = false; });
 
   closeCorner.addEventListener('click', ()=>{
     photoFullReturn = false;
@@ -1240,10 +1363,13 @@
   // ── 화면 크기: 전체화면이면 영상 비율로 꽉, 아니면 정사각형 안에 ──
   function applyVideoLayout(){
     videoEl.style.objectFit = 'contain';
+    const r = (videoEl.videoWidth && videoEl.videoHeight)
+            ? videoEl.videoWidth / videoEl.videoHeight : 16/9;
     if(isFullscreen()){
+      setAppRatio(r, true);
       vFull.textContent = '🗗';    // 축소 아이콘
     } else {
-      setAppRatio(1);              // 작은 화면(정사각형)
+      setAppRatio(r, true);        // 영상 비율로 화면 꽉 채움(여백 최소)
       vFull.textContent = '⛶';
     }
   }
@@ -1320,6 +1446,8 @@
   // 마우스가 영상 화면 안에서 움직이면 컨트롤 등장
   videoScreen.addEventListener('mousemove', showControls);
   videoScreen.addEventListener('touchstart', showControls, { passive:true });
+  videoScreen.addEventListener('pointerdown', showControls);
+  videoScreen.addEventListener('pointermove', showControls);
 
   // 버튼들
   $('v-play').addEventListener('click', (e)=>{ e.stopPropagation(); togglePlay(); });
@@ -1357,12 +1485,16 @@
     const r = volTrack.getBoundingClientRect();
     setVolume((clientX - r.left) / r.width);
   }
-  volTrack.addEventListener('mousedown', (e)=>{ e.stopPropagation(); volDragging = true; volFromX(e.clientX); });
-  window.addEventListener('mousemove', (e)=>{ if(volDragging){ volFromX(e.clientX); showControls(); } });
-  window.addEventListener('mouseup', ()=> volDragging = false);
+  volTrack.addEventListener('pointerdown', (e)=>{
+    e.stopPropagation(); volDragging = true; volFromX(e.clientX);
+    try{ volTrack.setPointerCapture(e.pointerId); }catch(err){}
+  });
+  window.addEventListener('pointermove', (e)=>{ if(volDragging){ volFromX(e.clientX); showControls(); } });
+  window.addEventListener('pointerup', ()=> volDragging = false);
+  window.addEventListener('pointercancel', ()=> volDragging = false);
   videoEl.addEventListener('volumechange', updateVolUI);
 
-  seek.addEventListener('click', (e)=>{
+  seek.addEventListener('pointerdown', (e)=>{
     e.stopPropagation();
     if(!isFinite(videoEl.duration)) return;
     const r = seek.getBoundingClientRect();
@@ -1677,7 +1809,8 @@
   function showSolvedDirect(url){
     const tmp = new Image();
     tmp.onload = ()=>{
-      setAppRatio(1); resetZoom(); solvedImg.src = url;
+      setAppRatio(tmp.naturalWidth / tmp.naturalHeight, true);
+      resetZoom(); solvedImg.src = url;
       showOnly(solvedScreen); photoFullReturn = true; enterFullscreen();
       // 닫으면 커스텀 컬렉션으로 돌아오도록 표시
       solvedReturn = openCustomCollection;
