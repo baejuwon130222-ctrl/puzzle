@@ -311,12 +311,19 @@
     position:relative;
     box-sizing:border-box;
   }
-  /* 조각 넣기 퍼즐: 아래 보관함 공간을 위해 살짝 작게 + 위로 붙임 */
-  #puzzle-screen.place-mode{ align-items:flex-start; }
+  /* 조각 넣기 퍼즐: 빈 칸(위) + 보관함(아래)을 세로로 쌓아 겹치지 않게 */
+  #puzzle-screen.place-mode{
+    flex-direction:column; align-items:center; justify-content:flex-start;
+    gap:10px; padding:calc(var(--pad) + 30px) 0 var(--pad);
+    box-sizing:border-box;
+  }
   #puzzle-screen.place-mode #puzzle-frame{
-    width:min(72vw, 62vh);
-    height:min(72vw, 62vh);
-    margin-top:calc(var(--pad) + 30px);
+    width:auto; height:auto;
+    flex:0 0 auto;
+    /* 위쪽 절반 안에서 최대한 크게 (보관함 공간 남김) */
+    width:min(70vw, 52vh);
+    height:min(70vw, 52vh);
+    margin:0;
   }
   #puzzle-grid{
     width:100%; height:100%;
@@ -349,17 +356,18 @@
   #puzzle-exit{ position:absolute; top:var(--pad); right:var(--pad); z-index:2; }
   /* 조각 넣기 퍼즐: 아래 보관함 — 조각들을 균일한 격자로 깔끔하게 */
   #puzzle-tray{
-    position:absolute; left:50%; transform:translateX(-50%);
-    bottom:calc(var(--pad) + 28px);
     display:none;
+    position:relative;
+    flex:0 1 auto;
     grid-auto-flow:row;
     gap:6px; justify-content:center; justify-items:center; align-content:start;
-    max-width:92%; max-height:30%; overflow-y:auto;
+    max-width:92%; overflow-y:auto;
     padding:10px; box-sizing:border-box;
     background:rgba(255,255,255,.05);
     border:1px solid rgba(255,255,255,.1); border-radius:10px;
   }
   #puzzle-tray.show{ display:grid; }
+  #puzzle-screen.place-mode #puzzle-tray{ max-height:34vh; margin-bottom:22px; }
   #puzzle-tray .piece{ border-radius:4px; outline:1px solid rgba(255,255,255,.12); outline-offset:-1px; }
   /* 빈 칸 */
   .slot{
@@ -587,10 +595,32 @@
   #picker-screen .grid img:active{ opacity:.5; }
   #picker-hint{ text-align:center; padding-top:10px; }
 
+  /* ══════════ 화면 캡처 ══════════ */
+  #capture-overlay{
+    position:fixed; inset:0; z-index:100; display:none;
+    cursor:crosshair; background:rgba(0,0,0,.15);
+    touch-action:none;
+  }
+  #capture-overlay.show{ display:block; }
+  #capture-canvas{ position:absolute; inset:0; width:100%; height:100%; }
+  #capture-rect{
+    position:absolute; display:none;
+    border:2px solid #4b8bff; background:rgba(75,139,255,.15);
+    box-shadow:0 0 0 9999px rgba(0,0,0,.45);
+    pointer-events:none;
+  }
+  #capture-guide{
+    position:absolute; top:16px; left:50%; transform:translateX(-50%);
+    background:rgba(0,0,0,.7); color:#fff; font-size:13px;
+    padding:8px 16px; border-radius:20px; pointer-events:none;
+    white-space:nowrap;
+  }
+
   @media (prefers-reduced-motion: reduce){
     *{ transition:none !important; }
   }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
 <body>
 
@@ -1509,21 +1539,28 @@
   // 휠(가운데) 버튼 클릭 → 바로 새 퍼즐. 방향에 따라 방식 선택
   //  위로 굴렸었으면(앞) = 위치 옮기기(swap) / 아래로(뒤) = 빈칸 끼우기(place)
   let lastWheelDir = 'up';
+  // 가운데 버튼의 기본 동작(자동 스크롤)을 완전히 차단
+  solvedScreen.addEventListener('pointerdown', (e)=>{
+    if(e.button === 1){ e.preventDefault(); e.stopPropagation(); }
+  });
   solvedScreen.addEventListener('mousedown', (e)=>{
     if(e.button === 1){          // 가운데(휠) 버튼
-      e.preventDefault();
+      e.preventDefault(); e.stopPropagation();
       startNewPuzzleFromViewer();
     }
   });
-  solvedScreen.addEventListener('auxclick', (e)=>{ if(e.button === 1) e.preventDefault(); });
+  solvedScreen.addEventListener('auxclick', (e)=>{
+    if(e.button === 1){ e.preventDefault(); e.stopPropagation(); }
+  });
 
   function startNewPuzzleFromViewer(){
-    // 지금 보고 있는 사진으로 곧바로 새 퍼즐
-    const idx = currentPhotoIdx;
-    if(idx < 0 || !PHOTOS[idx]) return;
+    // 방금 사진 말고 다른 랜덤 사진으로 새 퍼즐 (전체화면 유지)
+    const list = viewCollection().filter(i => PHOTOS[i]);
+    if(list.length === 0) return;
+    let pool = list.filter(i => i !== currentPhotoIdx);
+    if(pool.length === 0) pool = list;              // 한 장뿐이면 그대로
+    const idx = pool[Math.floor(Math.random() * pool.length)];
     puzzleStyle = (lastWheelDir === 'up') ? 'swap' : 'place';
-    exitFullscreen();
-    // 조각 수 선택 후 시작 (취소하면 다시 사진 보기)
     askPieceCount(
       (n)=> startPuzzle(PHOTOS[idx], idx, n),
       ()=> showSolved(PHOTOS[idx], idx)
@@ -1631,7 +1668,7 @@
       img.src = PHOTOS[i];
       img.draggable = false;
       img.addEventListener('click', ()=> openCollectionItem(i));
-      attachDeleteGesture(img, PHOTOS[i], openCollection);   // 업로드 사진이면 삭제 제스처
+      attachDeleteGesture(img, PHOTOS[i], openCollection, 'image');  // 우클릭/꾹→다운로드·삭제
       collectionGrid.appendChild(img);
     });
   }
@@ -1674,7 +1711,7 @@
       badge.innerHTML = '<svg viewBox="0 0 24 24" fill="#fff"><polygon points="8 5 19 12 8 19"/></svg>';
       card.append(v, badge);
       card.addEventListener('click', ()=> playVideo(url));
-      attachDeleteGesture(card, url, openVideoCollection);   // 업로드 영상이면 삭제 제스처
+      attachDeleteGesture(card, url, openVideoCollection, 'video'); // 우클릭/꾹→다운로드·삭제
       videoGrid.appendChild(card);
     });
   }
@@ -2332,6 +2369,135 @@
 
   // wipeCollection();
 
+  /* ══════════ 화면 캡처 (좌+우 클릭 동시) ══════════ */
+  const capOverlay = $('capture-overlay'), capCanvas = $('capture-canvas'), capRect = $('capture-rect'), capGuide = $('capture-guide');
+  let capActive = false, capReady = false, capBusy = false;
+  let capSX = 0, capSY = 0, capDrag = false;
+  let btnLeft = false, btnRight = false;
+
+  // 좌·우 버튼이 동시에 눌렸는지 감지
+  document.addEventListener('mousedown', (e)=>{
+    if(e.button === 0) btnLeft = true;
+    if(e.button === 2) btnRight = true;
+    if(btnLeft && btnRight && !capActive && !capBusy){
+      e.preventDefault();
+      startCapture();
+    }
+  });
+  document.addEventListener('mouseup', (e)=>{
+    if(e.button === 0) btnLeft = false;
+    if(e.button === 2) btnRight = false;
+  });
+  // 캡처 중엔 우클릭 메뉴 차단
+  document.addEventListener('contextmenu', (e)=>{ if(capActive || (btnLeft && btnRight)) e.preventDefault(); });
+
+  async function startCapture(){
+    if(typeof html2canvas === 'undefined'){
+      alert('캡처 기능을 불러오지 못했어요.\n(인터넷 연결이 필요합니다.)');
+      return;
+    }
+    capBusy = true;
+    try{
+      // 현재 화면을 이미지로 변환
+      const shot = await html2canvas(document.body, {
+        backgroundColor: '#000',
+        logging: false,
+        scale: Math.min(2, window.devicePixelRatio || 1),
+        useCORS: true
+      });
+      const ctx = capCanvas.getContext('2d');
+      capCanvas.width = shot.width; capCanvas.height = shot.height;
+      ctx.drawImage(shot, 0, 0);
+      capOverlay.classList.add('show');
+      capActive = true; capReady = false;
+      capRect.style.display = 'none';
+      capGuide.textContent = '드래그해서 캡처할 영역을 정하세요';
+    }catch(e){
+      alert('캡처하지 못했어요: ' + (e && e.message ? e.message : ''));
+    }
+    capBusy = false;
+  }
+
+  function capPoint(e){
+    const t = e.touches ? e.touches[0] : e;
+    return { x: t.clientX, y: t.clientY };
+  }
+  capOverlay.addEventListener('pointerdown', (e)=>{
+    if(!capActive) return;
+    e.preventDefault();
+    const p = capPoint(e);
+    capDrag = true; capSX = p.x; capSY = p.y;
+    capRect.style.display = 'block';
+    capRect.style.left = p.x + 'px'; capRect.style.top = p.y + 'px';
+    capRect.style.width = '0px'; capRect.style.height = '0px';
+  });
+  capOverlay.addEventListener('pointermove', (e)=>{
+    if(!capDrag) return;
+    const p = capPoint(e);
+    const x = Math.min(p.x, capSX), y = Math.min(p.y, capSY);
+    const w = Math.abs(p.x - capSX), h = Math.abs(p.y - capSY);
+    capRect.style.left = x + 'px'; capRect.style.top = y + 'px';
+    capRect.style.width = w + 'px'; capRect.style.height = h + 'px';
+  });
+  capOverlay.addEventListener('pointerup', (e)=>{
+    if(!capDrag) return;
+    capDrag = false;
+    const w = parseFloat(capRect.style.width), h = parseFloat(capRect.style.height);
+    if(w < 10 || h < 10){ capRect.style.display = 'none'; return; }
+    capReady = true;
+    askCapture();
+  });
+
+  function askCapture(){
+    openModal({
+      title: '영역을 캡처하시겠습니까?',
+      options: [
+        { label: '예', onClick: doCapture }
+      ],
+      onCancel: cancelCapture
+    });
+  }
+  function cancelCapture(){
+    capActive = false; capReady = false;
+    capOverlay.classList.remove('show');
+    capRect.style.display = 'none';
+  }
+  async function doCapture(){
+    // 선택 영역을 잘라서 저장
+    const rx = parseFloat(capRect.style.left), ry = parseFloat(capRect.style.top);
+    const rw = parseFloat(capRect.style.width), rh = parseFloat(capRect.style.height);
+    const sx = capCanvas.width / window.innerWidth, sy = capCanvas.height / window.innerHeight;
+
+    const out = document.createElement('canvas');
+    out.width = Math.round(rw * sx); out.height = Math.round(rh * sy);
+    out.getContext('2d').drawImage(
+      capCanvas, rx*sx, ry*sy, rw*sx, rh*sy, 0, 0, out.width, out.height
+    );
+
+    cancelCapture();
+
+    out.toBlob(async (blob)=>{
+      if(!blob){ alert('캡처 이미지를 만들지 못했어요.'); return; }
+      try{
+        await dbAdd({ type:'image', blob, name:'capture.png', captured:true });
+        await refreshUploads();
+        // 바로 사진에 넣지 않고 → 퍼즐을 맞춰야 컬렉션에 들어감
+        const idx = PHOTOS.length - 1;   // 방금 추가된 캡처
+        alert('캡처 완료! 퍼즐을 맞추면 사진 컬렉션에 저장됩니다.');
+        puzzleStyle = 'swap';
+        askPieceCount(
+          (n)=> startPuzzle(PHOTOS[idx], idx, n),
+          goMain
+        );
+      }catch(e){ alert('저장하지 못했어요: ' + (e && e.message)); }
+    }, 'image/png');
+  }
+  // ESC로 캡처 취소
+  document.addEventListener('keydown', (e)=>{
+    if(e.key === 'Escape' && capActive){ cancelCapture(); }
+  });
+
+
 
   /* ══════════ 업로드 (사진 / 영상) ══════════
      파일은 IndexedDB에 저장됩니다. (localStorage는 5MB 한계라 영상이 안 들어감) */
@@ -2419,34 +2585,54 @@
     }catch(e){ alert('삭제하지 못했어요: ' + (e && e.message)); }
   }
 
-  // PC 우클릭 / 모바일 꾹 누르기 → 삭제 확인창
-  function attachDeleteGesture(el, url, afterDelete){
-    if(!isUploadedUrl(url)) return;   // 업로드한 것만
+  // PC 우클릭 / 모바일 꾹 누르기 → 다운로드 / 삭제 메뉴
+  function attachDeleteGesture(el, url, afterDelete, kind){
     let longFired = false;
     el.addEventListener('contextmenu', (e)=>{
       e.preventDefault();
-      askDelete(url, afterDelete);
+      openItemMenu(url, afterDelete, kind);
     });
     let pressTimer = null;
     el.addEventListener('pointerdown', ()=>{
       longFired = false;
-      pressTimer = setTimeout(()=>{ longFired = true; askDelete(url, afterDelete); }, 600);
+      pressTimer = setTimeout(()=>{ longFired = true; openItemMenu(url, afterDelete, kind); }, 600);
     });
     const cancel = ()=>{ if(pressTimer){ clearTimeout(pressTimer); pressTimer = null; } };
     el.addEventListener('pointerup', cancel);
     el.addEventListener('pointerleave', cancel);
     el.addEventListener('pointermove', cancel);
-    // 길게 눌러 삭제창이 떴으면, 뒤따르는 클릭(재생/열기)은 막음
+    // 길게 눌러 메뉴가 떴으면, 뒤따르는 클릭(재생/열기)은 막음
     el.addEventListener('click', (e)=>{ if(longFired){ e.stopPropagation(); e.preventDefault(); longFired = false; } }, true);
   }
-  function askDelete(url, afterDelete){
-    openModal({
-      title: '이 항목을 삭제할까요?',
-      options: [
-        { label: '삭제', onClick: ()=> deleteUpload(url, afterDelete) }
-      ],
-      onCancel: ()=>{}
-    });
+  function openItemMenu(url, afterDelete, kind){
+    const opts = [{ label: '다운로드', onClick: ()=> downloadItem(url, kind) }];
+    if(isUploadedUrl(url)){
+      opts.push({ label: '삭제', onClick: ()=> deleteUpload(url, afterDelete) });
+    }
+    openModal({ title: '무엇을 할까요?', options: opts, onCancel: ()=>{} });
+  }
+  // 사진·영상 다운로드 (모바일은 이미지/영상 앱으로도 저장 가능)
+  async function downloadItem(url, kind){
+    try{
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const ext = (blob.type.split('/')[1] || (kind === 'video' ? 'mp4' : 'png')).split('+')[0];
+      const fname = 'secret_' + Date.now() + '.' + ext;
+      const file = new File([blob], fname, { type: blob.type });
+
+      // 모바일: 공유 시트로 '이미지/동영상 저장' 가능
+      if(navigator.canShare && navigator.canShare({ files:[file] })){
+        try{ await navigator.share({ files:[file] }); return; }catch(e){ if(e.name === 'AbortError') return; }
+      }
+      // PC 및 기타: 파일 다운로드
+      const dl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = dl; a.download = fname;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=> URL.revokeObjectURL(dl), 4000);
+    }catch(e){
+      alert('다운로드하지 못했어요: ' + (e && e.message ? e.message : ''));
+    }
   }
 
   function openUpload(purpose){
@@ -2494,5 +2680,11 @@
   goMain();
 })();
 </script>
+<!-- 화면 캡처 오버레이 -->
+<div id="capture-overlay">
+  <canvas id="capture-canvas"></canvas>
+  <div id="capture-rect"></div>
+  <div id="capture-guide">드래그해서 캡처할 영역을 정하세요</div>
+</div>
 </body>
 </html>
