@@ -794,6 +794,13 @@
 
 </div>
 
+<!-- 화면 캡처 오버레이 (스크립트보다 먼저 존재해야 함) -->
+<div id="capture-overlay">
+  <canvas id="capture-canvas"></canvas>
+  <div id="capture-rect"></div>
+  <div id="capture-guide">드래그해서 캡처할 영역을 정하세요</div>
+</div>
+
 <script>
 (function(){
 
@@ -2680,11 +2687,5 @@
   goMain();
 })();
 </script>
-<!-- 화면 캡처 오버레이 -->
-<div id="capture-overlay">
-  <canvas id="capture-canvas"></canvas>
-  <div id="capture-rect"></div>
-  <div id="capture-guide">드래그해서 캡처할 영역을 정하세요</div>
-</div>
 </body>
 </html>
