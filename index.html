@@ -132,6 +132,16 @@
     position:absolute; left:0; right:0; bottom:calc(var(--pad) + 46px);
     text-align:center; pointer-events:none;
   }
+  /* 모바일 퍼즐 방식 버튼 — 기본은 숨김, 터치기기에서만 표시 */
+  #mobile-puzzle-btns{
+    position:absolute; left:0; right:0; top:52%;
+    display:none; flex-direction:column; align-items:center; gap:10px;
+    pointer-events:none;
+  }
+  #mobile-puzzle-btns .btn-text{ pointer-events:auto; }
+  @media (pointer: coarse){
+    #mobile-puzzle-btns{ display:flex; }
+  }
 
   /* ══════════ Gemini 채팅 화면 (다크) ══════════ */
   #gemini-screen{
@@ -292,17 +302,21 @@
   }
   #puzzle-screen.show{ display:flex; }
   #puzzle-frame{
-    /* #app이 정사각형이므로 %로 안전하게 (넘침 방지 여유) */
-    width:70%; aspect-ratio:1/1;
-    max-width:70%; max-height:70%;
-    border:1px solid var(--line-on);
-    padding:5px;
+    /* 1:1 정사각형을 화면(짧은 쪽)에 꽉 맞춤 → 세로폰이면 가로 꽉, 넓은PC면 세로 꽉 */
+    width:min(96vw, 96vh);
+    height:min(96vw, 96vh);
+    max-width:100%; max-height:100%;
+    border:none;
+    padding:0;
     position:relative;
     box-sizing:border-box;
   }
-  /* 조각 넣기 퍼즐일 때는 아래 보관함 공간만큼 더 작게 */
+  /* 조각 넣기 퍼즐: 아래 보관함 공간을 위해 살짝 작게 + 위로 붙임 */
+  #puzzle-screen.place-mode{ align-items:flex-start; }
   #puzzle-screen.place-mode #puzzle-frame{
-    width:56%; max-height:56%;
+    width:min(72vw, 62vh);
+    height:min(72vw, 62vh);
+    margin-top:calc(var(--pad) + 30px);
   }
   #puzzle-grid{
     width:100%; height:100%;
@@ -332,16 +346,21 @@
     outline:2px solid #4b8bff; outline-offset:-2px;
     transform:scale(1.06);
   }
-  #puzzle-exit{ position:absolute; top:var(--pad); right:var(--pad); }
-  /* 조각 넣기 퍼즐: 아래쪽 조각 보관함 */
+  #puzzle-exit{ position:absolute; top:var(--pad); right:var(--pad); z-index:2; }
+  /* 조각 넣기 퍼즐: 아래 보관함 — 조각들을 균일한 격자로 깔끔하게 */
   #puzzle-tray{
-    position:absolute; left:var(--pad); right:var(--pad); bottom:calc(var(--pad) + 26px);
-    display:none; flex-wrap:wrap; gap:4px; justify-content:center;
-    max-height:26%; overflow-y:auto; padding:6px;
-    background:rgba(255,255,255,.04); border-radius:8px;
+    position:absolute; left:50%; transform:translateX(-50%);
+    bottom:calc(var(--pad) + 28px);
+    display:none;
+    grid-auto-flow:row;
+    gap:6px; justify-content:center; justify-items:center; align-content:start;
+    max-width:92%; max-height:30%; overflow-y:auto;
+    padding:10px; box-sizing:border-box;
+    background:rgba(255,255,255,.05);
+    border:1px solid rgba(255,255,255,.1); border-radius:10px;
   }
-  #puzzle-tray.show{ display:flex; }
-  #puzzle-tray .piece{ border-radius:3px; }
+  #puzzle-tray.show{ display:grid; }
+  #puzzle-tray .piece{ border-radius:4px; outline:1px solid rgba(255,255,255,.12); outline-offset:-1px; }
   /* 빈 칸 */
   .slot{
     background:rgba(255,255,255,.05);
@@ -615,6 +634,12 @@
     </div>
 
     <div id="hint-line" class="label">방향키 또는 화살표를 눌러보세요</div>
+
+    <!-- 모바일 전용: 퍼즐 방식 바로 시작 버튼 -->
+    <div id="mobile-puzzle-btns">
+      <button class="btn-text" id="mpz-swap">위치 옮기기 퍼즐</button>
+      <button class="btn-text" id="mpz-place">조각 끼우기 퍼즐</button>
+    </div>
   </div>
 
   <!-- ── 선택 모달 (사진 보기 / 조각 수 / 사진 클릭 시 등 공용) ── -->
@@ -1125,6 +1150,10 @@
     });
   }
 
+  // 모바일 버튼: 퍼즐 방식을 정하고 종류 선택창으로
+  $('mpz-swap').addEventListener('click', ()=>{ puzzleStyle = 'swap';  askPuzzleSource(); });
+  $('mpz-place').addEventListener('click', ()=>{ puzzleStyle = 'place'; askPuzzleSource(); });
+
   // mode: 'new' = 컬렉션에 없는 것 중 랜덤 / 'owned' = 컬렉션에 있는 것 중 랜덤
   function startPuzzleFlow(mode){
     const owned = loadCollection();
@@ -1165,6 +1194,7 @@
 
   /* ---------- 퍼즐 ---------- */
   const puzzleTray = $('puzzle-tray');
+  let trayPieceSizeRef = 48;
 
   function startPuzzle(url, imgIndex, pieceN){
     if(puzzleStyle === 'place') return startPlacePuzzle(url, imgIndex, pieceN);
@@ -1172,6 +1202,7 @@
     N = pieceN || 3;
     showOnly(puzzleScreen);
     puzzleScreen.classList.remove('place-mode');
+    setAppRatio(window.innerWidth / window.innerHeight, true);  // 화면 전체 사용
     puzzleTray.classList.remove('show'); puzzleTray.innerHTML = '';
     $('puzzle-hint').textContent = '조각을 끌어다 놓아 자리를 바꾸세요';
     puzzleGrid.style.setProperty('--n', N);
@@ -1202,6 +1233,7 @@
     N = pieceN || 3;
     showOnly(puzzleScreen);
     puzzleScreen.classList.add('place-mode');
+    setAppRatio(window.innerWidth / window.innerHeight, true);  // 화면 전체 사용
     $('puzzle-hint').textContent = '아래 조각을 빈 칸에 끌어다 넣으세요';
     puzzleGrid.style.setProperty('--n', N);
     puzzleGrid.innerHTML = '';
@@ -1220,8 +1252,10 @@
     const bgSize = `${N*100}% ${N*100}%`;
     const idxs = [...Array(N*N).keys()];
     shuffle(idxs);
-    // 보관함 조각 크기 (칸 크기에 맞춰 작게)
-    const trayPieceSize = Math.max(28, Math.min(64, Math.floor(320 / N)));
+    // 보관함: 한 줄에 N개씩 균일하게 배치, 조각 크기도 통일
+    const trayPieceSize = Math.max(30, Math.min(58, Math.floor(300 / N)));
+    trayPieceSizeRef = trayPieceSize;
+    puzzleTray.style.gridTemplateColumns = `repeat(${N}, ${trayPieceSize}px)`;
     idxs.forEach(home=>{
       const d = document.createElement('div');
       d.className = 'piece';
@@ -1284,9 +1318,10 @@
       if(target) target.classList.remove('drag-over');
 
       if(moved && target){
-        // 그 칸에 이미 조각이 있으면 보관함으로 되돌림
+        const sz = trayPieceSizeRef;
+        // 그 칸에 이미 조각이 있으면 보관함으로 되돌림 (보관함 크기로 복원)
         const exist = target.querySelector('.piece');
-        if(exist){ exist.style.width = piece.style.width; exist.style.height = piece.style.height; puzzleTray.appendChild(exist); }
+        if(exist){ exist.style.width = sz + 'px'; exist.style.height = sz + 'px'; puzzleTray.appendChild(exist); }
         // 칸에 딱 맞게 크기 조정해서 넣기
         piece.style.width = '100%'; piece.style.height = '100%';
         target.appendChild(piece);
@@ -1596,6 +1631,7 @@
       img.src = PHOTOS[i];
       img.draggable = false;
       img.addEventListener('click', ()=> openCollectionItem(i));
+      attachDeleteGesture(img, PHOTOS[i], openCollection);   // 업로드 사진이면 삭제 제스처
       collectionGrid.appendChild(img);
     });
   }
@@ -1638,6 +1674,7 @@
       badge.innerHTML = '<svg viewBox="0 0 24 24" fill="#fff"><polygon points="8 5 19 12 8 19"/></svg>';
       card.append(v, badge);
       card.addEventListener('click', ()=> playVideo(url));
+      attachDeleteGesture(card, url, openVideoCollection);   // 업로드 영상이면 삭제 제스처
       videoGrid.appendChild(card);
     });
   }
@@ -2335,17 +2372,80 @@
       rq.onerror = ()=> no(rq.error);
     });
   }
+  async function dbDelete(id){
+    const db = await openDB();
+    return await new Promise((ok, no)=>{
+      const tx = db.transaction(DB_STORE, 'readwrite');
+      const rq = tx.objectStore(DB_STORE).delete(id);
+      rq.onsuccess = ()=> ok();
+      rq.onerror = ()=> no(rq.error);
+    });
+  }
+
+  // 업로드 항목의 URL ↔ DB id 매핑 (지우기용)
+  const uploadIdByUrl = new Map();
 
   // 업로드한 파일을 PHOTOS / VIDEOS 뒤에 붙임
   async function refreshUploads(){
     const rows = await dbAll();
     uploadCache = rows;
+    // 이전에 만든 blob URL 정리
+    uploadIdByUrl.forEach((id, url)=> URL.revokeObjectURL(url));
+    uploadIdByUrl.clear();
     PHOTOS.length = BASE_PHOTO_COUNT;
     VIDEOS.length = BASE_VIDEO_COUNT;
     rows.forEach(r=>{
       const url = URL.createObjectURL(r.blob);
+      uploadIdByUrl.set(url, r.id);
       if(r.type === 'image') PHOTOS.push(url);
       else if(r.type === 'video') VIDEOS.push(url);
+    });
+  }
+
+  // 이 URL이 '내가 업로드한' 것인지
+  function isUploadedUrl(url){ return uploadIdByUrl.has(url); }
+
+  // 업로드 항목 삭제 (확인 후)
+  async function deleteUpload(url, afterDelete){
+    const id = uploadIdByUrl.get(url);
+    if(id === undefined){
+      alert('기본 제공 파일은 삭제할 수 없어요.\n(직접 업로드한 사진·영상만 지울 수 있습니다.)');
+      return;
+    }
+    try{
+      await dbDelete(id);
+      await refreshUploads();
+      if(afterDelete) afterDelete();
+    }catch(e){ alert('삭제하지 못했어요: ' + (e && e.message)); }
+  }
+
+  // PC 우클릭 / 모바일 꾹 누르기 → 삭제 확인창
+  function attachDeleteGesture(el, url, afterDelete){
+    if(!isUploadedUrl(url)) return;   // 업로드한 것만
+    let longFired = false;
+    el.addEventListener('contextmenu', (e)=>{
+      e.preventDefault();
+      askDelete(url, afterDelete);
+    });
+    let pressTimer = null;
+    el.addEventListener('pointerdown', ()=>{
+      longFired = false;
+      pressTimer = setTimeout(()=>{ longFired = true; askDelete(url, afterDelete); }, 600);
+    });
+    const cancel = ()=>{ if(pressTimer){ clearTimeout(pressTimer); pressTimer = null; } };
+    el.addEventListener('pointerup', cancel);
+    el.addEventListener('pointerleave', cancel);
+    el.addEventListener('pointermove', cancel);
+    // 길게 눌러 삭제창이 떴으면, 뒤따르는 클릭(재생/열기)은 막음
+    el.addEventListener('click', (e)=>{ if(longFired){ e.stopPropagation(); e.preventDefault(); longFired = false; } }, true);
+  }
+  function askDelete(url, afterDelete){
+    openModal({
+      title: '이 항목을 삭제할까요?',
+      options: [
+        { label: '삭제', onClick: ()=> deleteUpload(url, afterDelete) }
+      ],
+      onCancel: ()=>{}
     });
   }
 
